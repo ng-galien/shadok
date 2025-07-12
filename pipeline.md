@@ -166,8 +166,8 @@ pipeline("Create Person Entity") {
         }
     }
     stage("Test Migration") {
-        tool("maven") {
-            args goal: "liquibase:update", project: "org.example:common"
+        tool("gradle") {
+            args task: "liquibaseUpdate", project: "org.example:common"
         }
     }
 }
@@ -178,7 +178,7 @@ pipeline("Create Person Entity") {
 //- créer un test unitaire  `PersonTest` pour le constructeur,
 //- créer une migration Liquibase pour la table `Person`
 //- référencer la migration dans le fichier de configuration Liquibase.
-//- Exécuter la migration avec Maven.
+//- Exécuter la migration avec Gradle.
 ```
 
 ## Exemple complet
@@ -194,8 +194,8 @@ pipeline("Init Spring Boot") {
   stage("check project") {
     
     instruction("Vérifie que le projet a bien été créé.") {
-        tool("maven") {
-          args goal: "compile", project: "${input.name}"
+        tool("gradle") {
+          args task: "compileJava", project: "${input.name}"
         }
     }
     result {

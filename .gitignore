@@ -1,0 +1,70 @@
+# Gradle
+build/
+.gradle/
+gradle-app.setting
+!gradle/wrapper/
+
+# Gradle multi-modules specific
+**/build/
+
+# Quarkus specific
+.quarkus/
+**/src/main/resources/META-INF/resources/dev/
+**/.quarkus/
+
+# Eclipse
+.project
+.classpath
+.settings/
+bin/
+
+# IntelliJ
+.idea
+*.ipr
+*.iml
+*.iws
+
+# NetBeans
+nb-configuration.xml
+
+# Visual Studio Code
+.vscode
+.factorypath
+
+# OSX
+.DS_Store
+
+# Vim
+*.swp
+*.swo
+
+# patch
+*.orig
+*.rej
+
+# Local environment
+.env
+
+# Plugin directory
+/.quarkus/cli/plugins/
+# TLS Certificates
+.certs/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Build artifacts
+*.jar
+*.war
+*.ear
+*.class
+
+# Native compilation
+*.so
+*.dll
+*.dylib
