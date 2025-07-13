@@ -1,6 +1,7 @@
 # Quarkus Hello World Pod
 
-Une application Quarkus simple qui démontre l'intégration avec Kubernetes et le système Shadok.
+Une application Quarkus simple qui démontre l'intégration avec Kubernetes et le
+système Shadok.
 
 ## Fonctionnalités
 
@@ -43,10 +44,11 @@ Les manifests Kubernetes seront générés dans `build/kubernetes/`
 ## Configuration Kubernetes
 
 L'application est configurée pour :
+
 - **Namespace**: `default`
 - **Service Type**: `ClusterIP`
 - **Port**: `8080`
-- **Labels**: 
+- **Labels**:
   - `app.kubernetes.io/name=quarkus-hello`
   - `app.kubernetes.io/part-of=shadok-pods`
 

@@ -1,6 +1,7 @@
 # Python Hello World Pod
 
-Une application Python FastAPI simple qui démontre l'intégration avec Kubernetes et le système Shadok.
+Une application Python FastAPI simple qui démontre l'intégration avec Kubernetes
+et le système Shadok.
 
 ## Fonctionnalités
 
@@ -50,10 +51,11 @@ L'application sera accessible sur <http://localhost:8000>
 ## Configuration Kubernetes
 
 L'application est configurée pour :
+
 - **Namespace**: `default`
 - **Service Type**: `ClusterIP`
 - **Port**: `8000`
-- **Labels**: 
+- **Labels**:
   - `app.kubernetes.io/name=python-hello`
   - `app.kubernetes.io/part-of=shadok-pods`
 

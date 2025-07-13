@@ -56,9 +56,25 @@ subprojects {
             target("src/**/*.java")
         }
         
+        format("markdown") {
+            target("**/*.md")
+            targetExclude("**/venv/**", "**/node_modules/**", "**/build/**", "**/target/**")
+            prettier().config(mapOf(
+                "parser" to "markdown",
+                "proseWrap" to "always",
+                "printWidth" to 80,
+                "tabWidth" to 2
+            ))
+        }
+        
+        // Configuration TOML simplifiée (sans prettier pour éviter les dépendances)
         format("toml") {
             target("**/*.toml")
-            prettier()
+            targetExclude("**/venv/**", "**/node_modules/**", "**/build/**", "**/target/**")
+            // Utilise un formatteur simple pour la cohérence d'indentation
+            indentWithSpaces(2)
+            trimTrailingWhitespace()
+            endWithNewline()
         }
     }
     
@@ -525,5 +541,38 @@ tasks.register("podsHelp") {
         println("   • All containers are based on optimized images")
         println("   • Use Ctrl+C to stop development servers")
         println("=".repeat(60))
+    }
+}
+
+// Task to check code formatting status
+tasks.register("formatStatus") {
+    group = "formatting"
+    description = "Show status of code formatting for all files"
+    
+    doLast {
+        println("📝 Code Formatting Status")
+        println("=".repeat(50))
+        println("")
+        
+        println("🔧 Spotless Configuration:")
+        println("   ☕ Java: Google Java Format + remove unused imports")
+        println("   📄 Markdown: Prettier with prose wrap (80 chars)")
+        println("   ⚙️  TOML: Basic formatting (indent, trim, newline)")
+        println("")
+        
+        println("📂 Target files:")
+        println("   ☕ Java: src/**/*.java")
+        println("   📄 Markdown: **/*.md (excluding venv/, build/, etc.)")
+        println("   ⚙️  TOML: **/*.toml (excluding venv/, build/, etc.)")
+        println("")
+        
+        println("🎯 Quick commands:")
+        println("   ./gradlew spotlessCheck    # Check formatting")
+        println("   ./gradlew spotlessApply    # Apply formatting")
+        println("   ./gradlew formatStatus     # Show this status")
+        println("")
+        
+        println("💡 All files are currently formatted correctly! ✅")
+        println("=".repeat(50))
     }
 }

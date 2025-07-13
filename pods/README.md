@@ -1,6 +1,7 @@
 # Pods
 
-Ce répertoire contient les applications de démonstration pour différents langages et frameworks, utilisées pour tester la plateforme Shadok.
+Ce répertoire contient les applications de démonstration pour différents
+langages et frameworks, utilisées pour tester la plateforme Shadok.
 
 ## Applications disponibles
 
@@ -15,6 +16,7 @@ Une application Quarkus simple qui démontre :
 - Health Checks
 
 **Endpoints** :
+
 - `GET /hello` - Message Hello World en texte
 - `GET /hello/json` - Message Hello World en JSON
 - `GET /q/health` - Health check
@@ -37,6 +39,7 @@ Une application Python FastAPI simple qui démontre :
 - Health Checks et tests pytest
 
 **Endpoints** :
+
 - `GET /hello` - Message Hello World en texte
 - `GET /hello/json` - Message Hello World en JSON
 - `GET /health` - Health check
@@ -70,6 +73,7 @@ Chaque application pod doit contenir :
 ## Intégration avec Shadok
 
 Toutes les applications sont conçues pour être compatibles avec :
+
 - **Live Reload** - Rechargement automatique du code
 - **Cache de dépendances** - Partage `.m2`, `node_modules`, etc.
 - **Déploiement dynamique** - Sans pipeline CI/CD

@@ -1,11 +1,11 @@
 # Shadok
 
-Shadok est un opérateur Kubernetes qui facilite le développement en direct (live development) en gérant auto```yaml
-apiVersion: shadok.org/v1
-kind: Application
+Shadok est un opérateur Kubernetes qui facilite le développement en direct (live
+development) en gérant auto```yaml apiVersion: shadok.org/v1 kind: Application
 metad### Configuration
 
-Le webhook est configuré via le fichier `webhook.yaml` dans le répertoire `src/main/kubernetes`. Ce fichier définit :
+Le webhook est configuré via le fichier `webhook.yaml` dans le répertoire
+`src/main/kubernetes`. Ce fichier définit :
 
 - La configuration du webhook de mutation
 - Le service qui expose le webhook au serveur API Kubernetes
@@ -13,24 +13,17 @@ Le webhook est configuré via le fichier `webhook.yaml` dans le répertoire `src
 Pour déployer le webhook, vous devez :
 
 1. Générer un certificat TLS pour le webhook
-2. Remplacer `${CA_BUNDLE}` dans le fichier `webhook.yaml` par le certificat CA encodé en base64
-3. Appliquer le fichier `webhook.yaml` à votre cluster Kubernetese: my-application
-  namespace: default
-spec:
-  applicationType: QUARKUS
-  projectSourceName: "my-project-source"
-  dependencyCacheName: "maven-cache"
-  initContainerMounts:
-    - name: liquibase-changelog
-      mountPath: /liquibase/changelog.xml
-      subPath: liquibase/changelog.xml
-    - name: application-config
-      mountPath: /config/application.yml
-      subPath: config/application.yml
-  labels:
-    app-type: "microservice"
-    team: "backend"
-```
+2. Remplacer `${CA_BUNDLE}` dans le fichier `webhook.yaml` par le certificat CA
+   encodé en base64
+3. Appliquer le fichier `webhook.yaml` à votre cluster Kubernetese:
+   my-application namespace: default spec: applicationType: QUARKUS
+   projectSourceName: "my-project-source" dependencyCacheName: "maven-cache"
+   initContainerMounts: - name: liquibase-changelog mountPath:
+   /liquibase/changelog.xml subPath: liquibase/changelog.xml - name:
+   application-config mountPath: /config/application.yml subPath:
+   config/application.yml labels: app-type: "microservice" team: "backend"
+
+````
 
 **Note sur `initContainerMounts`** : Ce champ permet de monter des fichiers spécifiques issus du volume `ProjectSource` dans un `initContainer`, en utilisant le champ `subPath`. Cela permet par exemple d'injecter un changelog Liquibase ou des fichiers de configuration sans avoir à créer une `ConfigMap`.
 
@@ -79,29 +72,33 @@ spec:
   labels:
     environment: "development"
     team: "backend"
-```
+````
 
 #### Statut ProjectSource
 
-Le statut du CRD `ProjectSource` indique l'état actuel de la ressource et peut contenir des informations sur les erreurs éventuelles rencontrées lors de la création du PVC.
+Le statut du CRD `ProjectSource` indique l'état actuel de la ressource et peut
+contenir des informations sur les erreurs éventuelles rencontrées lors de la
+création du PVC.
 
 ### DependencyCache
 
-Le CRD `DependencyCache` permet de créer un PVC (PersistentVolumeClaim) dédié au cache des dépendances (comme le répertoire m2 pour Maven) qui peut être partagé entre plusieurs applications.
+Le CRD `DependencyCache` permet de créer un PVC (PersistentVolumeClaim) dédié au
+cache des dépendances (comme le répertoire m2 pour Maven) qui peut être partagé
+entre plusieurs applications.
 
 #### Spécification DependencyCache
 
-| Champ | Description | Requis | Valeur par défaut |
-|-------|-------------|---------|------------------|
-| `persistentVolumeName` | Nom du PersistentVolume existant | ✅ | - |
-| `cachePath` | Chemin dans le PersistentVolume où se trouve le cache des dépendances | ✅ | - |
-| `pvcName` | Nom du PersistentVolumeClaim à créer | ✅ | - |
-| `storageSize` | Taille de stockage à allouer (ex: "5Gi", "10Gi") | ❌ | "5Gi" |
-| `storageClass` | Classe de stockage pour le PVC | ❌ | "standard" |
-| `accessMode` | Mode d'accès pour le PVC | ❌ | "ReadWriteMany" |
-| `configMaps` | Liste des ConfigMaps à monter dans le cache de dépendances | ❌ | [] |
-| `secrets` | Liste des Secrets à monter dans le cache de dépendances | ❌ | [] |
-| `labels` | Labels optionnels à appliquer au PVC créé | ❌ | {} |
+| Champ                  | Description                                                           | Requis | Valeur par défaut |
+| ---------------------- | --------------------------------------------------------------------- | ------ | ----------------- |
+| `persistentVolumeName` | Nom du PersistentVolume existant                                      | ✅     | -                 |
+| `cachePath`            | Chemin dans le PersistentVolume où se trouve le cache des dépendances | ✅     | -                 |
+| `pvcName`              | Nom du PersistentVolumeClaim à créer                                  | ✅     | -                 |
+| `storageSize`          | Taille de stockage à allouer (ex: "5Gi", "10Gi")                      | ❌     | "5Gi"             |
+| `storageClass`         | Classe de stockage pour le PVC                                        | ❌     | "standard"        |
+| `accessMode`           | Mode d'accès pour le PVC                                              | ❌     | "ReadWriteMany"   |
+| `configMaps`           | Liste des ConfigMaps à monter dans le cache de dépendances            | ❌     | []                |
+| `secrets`              | Liste des Secrets à monter dans le cache de dépendances               | ❌     | []                |
+| `labels`               | Labels optionnels à appliquer au PVC créé                             | ❌     | {}                |
 
 #### Exemple d'utilisation DependencyCache
 
@@ -131,21 +128,26 @@ spec:
 
 #### Statut DependencyCache
 
-Le statut du CRD `DependencyCache` indique l'état actuel de la ressource et peut contenir des informations sur les erreurs éventuelles rencontrées lors de la création du PVC.
+Le statut du CRD `DependencyCache` indique l'état actuel de la ressource et peut
+contenir des informations sur les erreurs éventuelles rencontrées lors de la
+création du PVC.
 
 ### Application
 
-Le CRD `Application` est une ressource parente qui regroupe les CRDs `ProjectSource` et `DependencyCache` et ajoute un type d'application. Ce CRD permet de définir une application complète avec ses sources et son cache de dépendances.
+Le CRD `Application` est une ressource parente qui regroupe les CRDs
+`ProjectSource` et `DependencyCache` et ajoute un type d'application. Ce CRD
+permet de définir une application complète avec ses sources et son cache de
+dépendances.
 
 #### Spécification Application
 
-| Champ | Description | Requis | Types supportés |
-|-------|-------------|---------|-----------------|
-| `applicationType` | Type d'application | ✅ | SPRING, QUARKUS, NODE, PYTHON, GO, RUBY, PHP, DOTNET, OTHER |
-| `projectSourceName` | Nom de la ressource ProjectSource à utiliser | ✅ | - |
-| `dependencyCacheName` | Nom de la ressource DependencyCache à utiliser | ✅ | - |
-| `initContainerMounts` | Liste des points de montage supplémentaires pour initContainer | ❌ | [] |
-| `labels` | Labels optionnels à appliquer aux ressources créées | ❌ | {} |
+| Champ                 | Description                                                    | Requis | Types supportés                                             |
+| --------------------- | -------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
+| `applicationType`     | Type d'application                                             | ✅     | SPRING, QUARKUS, NODE, PYTHON, GO, RUBY, PHP, DOTNET, OTHER |
+| `projectSourceName`   | Nom de la ressource ProjectSource à utiliser                   | ✅     | -                                                           |
+| `dependencyCacheName` | Nom de la ressource DependencyCache à utiliser                 | ✅     | -                                                           |
+| `initContainerMounts` | Liste des points de montage supplémentaires pour initContainer | ❌     | []                                                          |
+| `labels`              | Labels optionnels à appliquer aux ressources créées            | ❌     | {}                                                          |
 
 #### Exemple d'utilisation Application
 
@@ -165,40 +167,54 @@ spec:
       subPath: liquibase/changelog.xml
 ```
 
-Le champ `initContainerMounts` permet de monter des fichiers spécifiques issus du volume `ProjectSource` dans un `initContainer`, en utilisant le champ `subPath`. Cela permet par exemple d’injecter un changelog Liquibase sans avoir à créer une `ConfigMap`.
+Le champ `initContainerMounts` permet de monter des fichiers spécifiques issus
+du volume `ProjectSource` dans un `initContainer`, en utilisant le champ
+`subPath`. Cela permet par exemple d’injecter un changelog Liquibase sans avoir
+à créer une `ConfigMap`.
 
 #### Statut
 
-Le statut du CRD `Application` indique l'état actuel de la ressource et contient des informations sur l'état des ressources ProjectSource et DependencyCache associées.
+Le statut du CRD `Application` indique l'état actuel de la ressource et contient
+des informations sur l'état des ressources ProjectSource et DependencyCache
+associées.
 
 ## Webhook de Mutation
 
-Le projet inclut également un webhook de mutation pour les Deployments qui permet d'injecter automatiquement des volumes et des montages de volumes pour les ConfigMaps et les Secrets associés à une Application.
+Le projet inclut également un webhook de mutation pour les Deployments qui
+permet d'injecter automatiquement des volumes et des montages de volumes pour
+les ConfigMaps et les Secrets associés à une Application.
 
 ### Fonctionnement
 
-1. Le webhook intercepte les opérations CREATE et UPDATE sur les ressources Deployment
-2. Il vérifie si le Deployment contient l'annotation `shadok.org/application-name`
+1. Le webhook intercepte les opérations CREATE et UPDATE sur les ressources
+   Deployment
+2. Il vérifie si le Deployment contient l'annotation
+   `shadok.org/application-name`
 3. Si l'annotation est présente, il récupère l'Application correspondante
 4. Il récupère ensuite le DependencyCache associé à l'Application
 5. Il extrait les ConfigMaps et les Secrets du DependencyCache
-6. Il modifie le Deployment pour inclure des volumes et des montages de volumes pour ces ConfigMaps et Secrets
+6. Il modifie le Deployment pour inclure des volumes et des montages de volumes
+   pour ces ConfigMaps et Secrets
 
 ### Configuration
 
-Le webhook est configuré via le fichier `webhook.yaml` dans le répertoire `src/main/kubernetes`. Ce fichier définit:
+Le webhook est configuré via le fichier `webhook.yaml` dans le répertoire
+`src/main/kubernetes`. Ce fichier définit:
+
 - La configuration du webhook de mutation
 - Le service qui expose le webhook au serveur API Kubernetes
 
 Pour déployer le webhook, vous devez :
 
 1. Générer un certificat TLS pour le webhook
-2. Remplacer `${CA_BUNDLE}` dans le fichier `webhook.yaml` par le certificat CA encodé en base64
+2. Remplacer `${CA_BUNDLE}` dans le fichier `webhook.yaml` par le certificat CA
+   encodé en base64
 3. Appliquer le fichier `webhook.yaml` à votre cluster Kubernetes
 
 ### Utilisation du webhook
 
-Pour utiliser le webhook de mutation, ajoutez simplement l'annotation suivante à votre Deployment :
+Pour utiliser le webhook de mutation, ajoutez simplement l'annotation suivante à
+votre Deployment :
 
 ```yaml
 apiVersion: apps/v1
@@ -218,30 +234,34 @@ spec:
 L'objectif du webhook est de transformer dynamiquement le Pod pour qu'il :
 
 1. **Monte les sources** (ProjectSource) dans un volume
-2. **Monte certains fichiers** de ce volume dans un ou plusieurs initContainers (ex: changelog Liquibase)
-3. **Remplace le container principal** pour exécuter l'application Java avec un mode live-reload
+2. **Monte certains fichiers** de ce volume dans un ou plusieurs initContainers
+   (ex: changelog Liquibase)
+3. **Remplace le container principal** pour exécuter l'application Java avec un
+   mode live-reload
 
 🔧 **Étapes de mutation détaillées**
 
 #### 1. Ajout du volume project-source
 
-Le webhook ajoute automatiquement un volume basé sur le PVC défini dans le ProjectSource :
+Le webhook ajoute automatiquement un volume basé sur le PVC défini dans le
+ProjectSource :
 
 ```yaml
 volumes:
   - name: project-source
     persistentVolumeClaim:
-      claimName: my-app-sources  # du ProjectSource
+      claimName: my-app-sources # du ProjectSource
       readOnly: true
   - name: dependency-cache
     persistentVolumeClaim:
-      claimName: maven-cache     # du DependencyCache
+      claimName: maven-cache # du DependencyCache
       readOnly: false
 ```
 
 #### 2. Injection des volumeMounts dans les initContainers
 
-Pour chaque élément défini dans `initContainerMounts` de l'Application, le webhook ajoute des montages spécifiques :
+Pour chaque élément défini dans `initContainerMounts` de l'Application, le
+webhook ajoute des montages spécifiques :
 
 ```yaml
 initContainers:
@@ -250,15 +270,17 @@ initContainers:
     volumeMounts:
       - name: project-source
         mountPath: /liquibase/changelog.xml
-        subPath: liquibase/changelog.xml  # fichier spécifique du projet
+        subPath: liquibase/changelog.xml # fichier spécifique du projet
         readOnly: true
 ```
 
 #### 3. Transformation du container principal pour le live-reload
 
-Le webhook remplace le container principal pour supporter le développement en direct :
+Le webhook remplace le container principal pour supporter le développement en
+direct :
 
 **Avant mutation (container de production) :**
+
 ```yaml
 containers:
   - name: app
@@ -268,31 +290,33 @@ containers:
 ```
 
 **Après mutation (container de développement) :**
+
 ```yaml
 containers:
   - name: app
-    image: my-registry/my-app-dev:latest  # image avec outils de dev
-    command: 
+    image: my-registry/my-app-dev:latest # image avec outils de dev
+    command:
       - "mvn"
-      - "spring-boot:run"  # ou "quarkus:dev" selon le type
+      - "spring-boot:run" # ou "quarkus:dev" selon le type
     env:
       - name: MAVEN_OPTS
         value: "-Dmaven.repo.local=/cache/.m2/repository"
     volumeMounts:
       - name: project-source
-        mountPath: /workspace      # sources du projet
+        mountPath: /workspace # sources du projet
         readOnly: true
       - name: dependency-cache
-        mountPath: /cache/.m2      # cache Maven partagé
+        mountPath: /cache/.m2 # cache Maven partagé
     ports:
       - containerPort: 8080
-      - containerPort: 5005        # port debug JVM
+      - containerPort: 5005 # port debug JVM
     workingDir: /workspace
 ```
 
 #### 4. Injection des ConfigMaps et Secrets
 
-Le webhook ajoute également les volumes pour les ConfigMaps et Secrets définis dans le DependencyCache :
+Le webhook ajoute également les volumes pour les ConfigMaps et Secrets définis
+dans le DependencyCache :
 
 ```yaml
 volumes:
@@ -317,11 +341,10 @@ volumeMounts:
 
 - Le Pod exécute directement l'application à partir des sources montées
 - Le développement est fluide grâce au live reload
-- Les initContainers peuvent accéder à des fichiers du projet sans duplication de ressources
+- Les initContainers peuvent accéder à des fichiers du projet sans duplication
+  de ressources
 - Le cache des dépendances est partagé entre les builds
 - Les configurations sont injectées automatiquement
-
-
 
 ### Paramètres du webhook
 
@@ -354,6 +377,7 @@ volumeMounts:
    ```
 
 3. **Configurer le webhook** :
+
    - Générer un certificat TLS ou utiliser cert-manager
    - Remplacer `${CA_BUNDLE}` dans `webhook.yaml`
    - Appliquer la configuration du webhook
@@ -368,12 +392,12 @@ volumeMounts:
 
 L'opérateur peut être configuré via les variables d'environnement suivantes :
 
-| Variable | Description | Valeur par défaut |
-|----------|-------------|------------------|
-| `WEBHOOK_PORT` | Port d'écoute du webhook | 8443 |
+| Variable                | Description                   | Valeur par défaut  |
+| ----------------------- | ----------------------------- | ------------------ |
+| `WEBHOOK_PORT`          | Port d'écoute du webhook      | 8443               |
 | `WEBHOOK_TLS_CERT_PATH` | Chemin vers le certificat TLS | `/etc/tls/tls.crt` |
-| `WEBHOOK_TLS_KEY_PATH` | Chemin vers la clé privée TLS | `/etc/tls/tls.key` |
-| `LOG_LEVEL` | Niveau de logging | INFO |
+| `WEBHOOK_TLS_KEY_PATH`  | Chemin vers la clé privée TLS | `/etc/tls/tls.key` |
+| `LOG_LEVEL`             | Niveau de logging             | INFO               |
 
 ## Exemples d'utilisation complète
 
@@ -441,10 +465,10 @@ spec:
         app: my-quarkus-app
     spec:
       containers:
-      - name: quarkus-app
-        image: my-quarkus-app:latest
-        ports:
-        - containerPort: 8080
+        - name: quarkus-app
+          image: my-quarkus-app:latest
+          ports:
+            - containerPort: 8080
 ```
 
 ## Dépannage
@@ -452,11 +476,13 @@ spec:
 ### Problèmes courants
 
 1. **Le webhook ne fonctionne pas** :
+
    - Vérifiez que le certificat TLS est valide
    - Vérifiez que le service webhook est accessible
    - Consultez les logs de l'opérateur
 
 2. **Les PVCs ne sont pas créés** :
+
    - Vérifiez que les PVs référencés existent
    - Vérifiez les permissions RBAC
    - Consultez le statut des ressources CRD
@@ -481,19 +507,20 @@ kubectl get mutatingwebhookconfigurations shadok-deployment-webhook -o yaml
 
 ### Types d'applications et commandes de live-reload
 
-Le webhook adapte automatiquement la commande de démarrage selon le type d'application défini dans le CRD `Application` :
+Le webhook adapte automatiquement la commande de démarrage selon le type
+d'application défini dans le CRD `Application` :
 
-| Type d'application | Commande de live-reload | Port de debug |
-|-------------------|------------------------|--------------|
-| `SPRING` | `mvn spring-boot:run` | 5005 |
-| `QUARKUS` | `mvn quarkus:dev` | 5005 |
-| `NODE` | `npm run dev` | 9229 |
-| `PYTHON` | `python manage.py runserver 0.0.0.0:8080` | 5678 |
-| `GO` | `go run main.go` | 40000 |
-| `RUBY` | `bundle exec rails server` | 1234 |
-| `PHP` | `php -S 0.0.0.0:8080` | 9003 |
-| `DOTNET` | `dotnet watch run` | - |
-| `OTHER` | Configuration manuelle requise | - |
+| Type d'application | Commande de live-reload                   | Port de debug |
+| ------------------ | ----------------------------------------- | ------------- |
+| `SPRING`           | `mvn spring-boot:run`                     | 5005          |
+| `QUARKUS`          | `mvn quarkus:dev`                         | 5005          |
+| `NODE`             | `npm run dev`                             | 9229          |
+| `PYTHON`           | `python manage.py runserver 0.0.0.0:8080` | 5678          |
+| `GO`               | `go run main.go`                          | 40000         |
+| `RUBY`             | `bundle exec rails server`                | 1234          |
+| `PHP`              | `php -S 0.0.0.0:8080`                     | 9003          |
+| `DOTNET`           | `dotnet watch run`                        | -             |
+| `OTHER`            | Configuration manuelle requise            | -             |
 
 **Variables d'environnement ajoutées selon le type :**
 
