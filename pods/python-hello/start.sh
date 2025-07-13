@@ -34,20 +34,20 @@ check_python() {
 # Installation des dépendances
 install_deps() {
     echo "📦 Installation des dépendances Python..."
-    
+
     # Création de l'environnement virtuel si nécessaire
     if [ ! -d "venv" ]; then
         echo "🔧 Création de l'environnement virtuel..."
         python3 -m venv venv
     fi
-    
+
     # Activation de l'environnement virtuel
     source venv/bin/activate
-    
+
     # Installation des dépendances
     pip install --upgrade pip
     pip install -r requirements.txt
-    
+
     echo "✅ Dépendances installées!"
 }
 

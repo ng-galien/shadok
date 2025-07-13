@@ -67,6 +67,26 @@ subprojects {
             ))
         }
         
+        // Configuration Dockerfile
+        format("dockerfile") {
+            target("**/Dockerfile*")
+            targetExclude("**/venv/**", "**/node_modules/**", "**/build/**", "**/target/**")
+            // Formatage basique pour les Dockerfiles
+            indentWithSpaces(4)
+            trimTrailingWhitespace()
+            endWithNewline()
+        }
+        
+        // Configuration scripts shell
+        format("shell") {
+            target("**/*.sh")
+            targetExclude("**/venv/**", "**/node_modules/**", "**/build/**", "**/target/**")
+            // Formatage basique pour les scripts shell
+            indentWithSpaces(2)
+            trimTrailingWhitespace()
+            endWithNewline()
+        }
+        
         // Configuration TOML simplifiée (sans prettier pour éviter les dépendances)
         format("toml") {
             target("**/*.toml")
@@ -557,12 +577,16 @@ tasks.register("formatStatus") {
         println("🔧 Spotless Configuration:")
         println("   ☕ Java: Google Java Format + remove unused imports")
         println("   📄 Markdown: Prettier with prose wrap (80 chars)")
+        println("   🐳 Dockerfile: Basic formatting (4-space indent)")
+        println("   🔧 Shell scripts: Basic formatting (2-space indent)")
         println("   ⚙️  TOML: Basic formatting (indent, trim, newline)")
         println("")
         
         println("📂 Target files:")
         println("   ☕ Java: src/**/*.java")
         println("   📄 Markdown: **/*.md (excluding venv/, build/, etc.)")
+        println("   🐳 Dockerfile: **/Dockerfile* (excluding venv/, build/, etc.)")
+        println("   🔧 Shell: **/*.sh (excluding venv/, build/, etc.)")
         println("   ⚙️  TOML: **/*.toml (excluding venv/, build/, etc.)")
         println("")
         
