@@ -14,7 +14,6 @@ pluginManagement {
     plugins {
         id("io.quarkus") version quarkusVersion
         id("com.diffplug.spotless") version spotlessVersion
-        kotlin("jvm") version "1.9.24"
     }
 }
 
