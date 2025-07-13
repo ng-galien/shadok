@@ -90,13 +90,19 @@ cleanup_existing_registry() {
 create_local_registry() {
     log_info "🐳 Création de la registry locale..."
     
+    # Créer le répertoire pour le volume persistant de la registry
+    local registry_volume_dir="${HOME}/.shadok/registry-data"
+    mkdir -p "${registry_volume_dir}"
+    
     docker run -d \
         --restart=always \
         --name "${REGISTRY_NAME}" \
         -p "${REGISTRY_PORT}:5000" \
+        -v "${registry_volume_dir}:/var/lib/registry" \
         registry:2
     
     log_success "📦 Registry locale créée sur le port ${REGISTRY_PORT}"
+    log_info "💾 Volume persistant: ${registry_volume_dir}"
 }
 
 # Créer la configuration kind
@@ -144,8 +150,6 @@ nodes:
 ${pods_mounts}
 containerdConfigPatches:
 - |-
-  [plugins."io.containerd.grpc.v1.cri".registry]
-    config_path = "/etc/containerd/certs.d"
   [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
     [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:${REGISTRY_PORT}"]
       endpoint = ["http://${REGISTRY_NAME}:5000"]
@@ -202,12 +206,32 @@ install_controllers() {
     
     # Attendre que l'ingress controller soit prêt
     log_info "⏳ Attente du démarrage de l'ingress controller..."
+    
+    # D'abord attendre que le job d'admission patch soit terminé
+    kubectl wait --namespace ingress-nginx \
+        --for=condition=complete job/ingress-nginx-admission-patch \
+        --timeout=90s
+    
+    # Puis attendre que les pods du contrôleur soient prêts
     kubectl wait --namespace ingress-nginx \
         --for=condition=ready pod \
         --selector=app.kubernetes.io/component=controller \
         --timeout=90s
     
-    log_success "🌐 Contrôleurs installés"
+    # Patcher la ConfigMap pour activer les snippets
+    log_info "🔧 Activation des snippets pour ingress-nginx..."
+    kubectl patch configmap ingress-nginx-controller -n ingress-nginx \
+        --patch '{"data":{"allow-snippet-annotations":"true","annotations-risk-level":"Critical"}}'
+    
+    # Redémarrer le contrôleur pour appliquer les changements
+    log_info "🔄 Redémarrage du contrôleur ingress-nginx..."
+    kubectl rollout restart deployment/ingress-nginx-controller -n ingress-nginx
+    
+    # Attendre que le redémarrage soit terminé
+    log_info "⏳ Attente que le contrôleur redémarre..."
+    kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=90s
+    
+    log_success "🌐 Contrôleurs installés avec snippets activés"
 }
 
 # Créer les PersistentVolumes pour les pods sources
@@ -301,6 +325,7 @@ show_cluster_info() {
     log_info "🧹 Pour nettoyer:"
     echo "  - kind delete cluster --name ${CLUSTER_NAME}"
     echo "  - docker rm -f ${REGISTRY_NAME}"
+    echo "  - rm -rf ~/.shadok/registry-data  # Supprimer le cache des images"
     echo ""
     
     # Afficher l'état des nodes

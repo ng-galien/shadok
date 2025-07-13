@@ -99,62 +99,29 @@ install_cert_manager() {
     log_success "🔒 cert-manager installé et opérationnel"
 }
 
-# Installer ingress-nginx avec snippets activés
-install_ingress_nginx() {
-    log_info "🌐 Installation d'ingress-nginx avec snippets..."
+# Vérifier ingress-nginx et s'assurer que les snippets sont activés
+verify_ingress_nginx() {
+    log_info "🌐 Vérification d'ingress-nginx..."
     
-    # Créer le namespace
-    kubectl create namespace ingress-nginx --dry-run=client -o yaml | kubectl apply -f -
+    # Vérifier si ingress-nginx est installé et opérationnel
+    if ! kubectl get namespace ingress-nginx &> /dev/null; then
+        log_error "❌ Namespace ingress-nginx non trouvé"
+        log_error "   Assurez-vous que start-kind.sh a été exécuté avec succès"
+        exit 1
+    fi
     
-    # Créer les valeurs pour activer les snippets
-    cat > /tmp/ingress-nginx-values.yaml <<EOF
-controller:
-  allowSnippetAnnotations: true
-  config:
-    allow-snippet-annotations: "true"
-    enable-real-ip: "true"
-    use-forwarded-headers: "true"
-  extraArgs:
-    enable-ssl-passthrough: true
-  service:
-    type: NodePort
-  nodeSelector:
-    ingress-ready: "true"
-  tolerations:
-    - key: node-role.kubernetes.io/control-plane
-      operator: Equal
-      effect: NoSchedule
-    - key: node-role.kubernetes.io/master
-      operator: Equal
-      effect: NoSchedule
-  publishService:
-    enabled: false
-  extraEnvs:
-    - name: POD_NAME
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.name
-    - name: POD_NAMESPACE
-      valueFrom:
-        fieldRef:
-          fieldPath: metadata.namespace
-EOF
+    if ! kubectl get pods -n ingress-nginx -l app.kubernetes.io/component=controller --no-headers | grep -q "Running"; then
+        log_error "❌ Contrôleur ingress-nginx non opérationnel"
+        log_error "   Assurez-vous que start-kind.sh a été exécuté avec succès"
+        exit 1
+    fi
     
-    # Installer ingress-nginx avec Helm
-    helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-        --namespace ingress-nginx \
-        --values /tmp/ingress-nginx-values.yaml \
-        --wait --timeout=300s
-    
-    # Nettoyer le fichier temporaire
-    rm -f /tmp/ingress-nginx-values.yaml
-    
-    # Attendre que l'ingress controller soit prêt
-    log_info "⏳ Attente que l'ingress controller soit prêt..."
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=controller \
-        -n ingress-nginx --timeout=300s
-    
-    log_success "🚀 ingress-nginx installé avec snippets activés"
+    # Vérifier que les snippets sont activés
+    if kubectl get configmap ingress-nginx-controller -n ingress-nginx -o jsonpath='{.data.allow-snippet-annotations}' | grep -q "true"; then
+        log_success "✅ ingress-nginx opérationnel avec snippets activés"
+    else
+        log_warning "⚠️  Les snippets ne semblent pas activés dans ingress-nginx"
+    fi
 }
 
 # Installer le Kubernetes Dashboard
@@ -210,7 +177,7 @@ EOF
     # Récupérer le token JWT
     local dashboard_token=$(kubectl get secret dashboard-admin-token -n kubernetes-dashboard -o jsonpath='{.data.token}' | base64 -d)
     
-    # Créer l'ingress avec injection du token
+    # Créer l'ingress avec injection du token et HTTPS
     kubectl apply -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -219,7 +186,9 @@ metadata:
   namespace: kubernetes-dashboard
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    cert-manager.io/cluster-issuer: "selfsigned-issuer"
     nginx.ingress.kubernetes.io/configuration-snippet: |
       # Auto-login avec le token JWT
       access_by_lua_block {
@@ -228,8 +197,12 @@ metadata:
       }
 spec:
   ingressClassName: nginx
+  tls:
+  - hosts:
+    - dashboard.127.0.0.1.nip.io
+    secretName: dashboard-tls
   rules:
-  - host: dashboard.local
+  - host: dashboard.127.0.0.1.nip.io
     http:
       paths:
       - path: /
@@ -241,8 +214,8 @@ spec:
               number: 443
 EOF
     
-    log_success "📈 Kubernetes Dashboard installé avec auto-login"
-    log_info "🌐 Accès: http://dashboard.local (ajoutez à /etc/hosts: 127.0.0.1 dashboard.local)"
+    log_success "📈 Kubernetes Dashboard installé avec auto-login et HTTPS"
+    log_info "🌐 Accès: https://dashboard.127.0.0.1.nip.io"
 }
 
 # Créer un pod curl pour les tests
@@ -324,10 +297,161 @@ spec:
   dnsNames:
   - test.local
   - dashboard.local
+  - dashboard.127.0.0.1.nip.io
+  - shadok.127.0.0.1.nip.io
+  - "*.127.0.0.1.nip.io"
   - "*.local"
 EOF
     
     log_success "🔒 Certificat de test créé"
+}
+
+# Créer un serveur nginx de test avec ingress
+create_test_nginx_server() {
+    log_info "🌐 Création d'un serveur nginx de test..."
+    
+    # Créer le namespace pour les tests
+    kubectl create namespace test-nginx --dry-run=client -o yaml | kubectl apply -f -
+    
+    # Déployer nginx avec une page personnalisée
+    kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-test
+  namespace: test-nginx
+  labels:
+    app: nginx-test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx-test
+  template:
+    metadata:
+      labels:
+        app: nginx-test
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /usr/share/nginx/html
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: nginx-test-content
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-test-content
+  namespace: test-nginx
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>🎪 Shadok Test Server</title>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                text-align: center;
+                padding: 50px;
+                margin: 0;
+            }
+            .container {
+                background: rgba(255,255,255,0.1);
+                padding: 30px;
+                border-radius: 15px;
+                backdrop-filter: blur(10px);
+                max-width: 600px;
+                margin: 0 auto;
+            }
+            h1 { font-size: 3em; margin-bottom: 20px; }
+            .emoji { font-size: 4em; }
+            .info { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin: 20px 0; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="emoji">🎪</div>
+            <h1>Shadok Kind Cluster</h1>
+            <p>Serveur nginx de test déployé avec succès !</p>
+            <div class="info">
+                <strong>Cluster:</strong> kind-shadok-dev<br>
+                <strong>Namespace:</strong> test-nginx<br>
+                <strong>Ingress:</strong> shadok.127.0.0.1.nip.io<br>
+                <strong>Status:</strong> ✅ Opérationnel
+            </div>
+            <p>🚀 Votre environnement de développement Kubernetes est prêt !</p>
+        </div>
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-test
+  namespace: test-nginx
+  labels:
+    app: nginx-test
+spec:
+  selector:
+    app: nginx-test
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nginx-test
+  namespace: test-nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "selfsigned-issuer"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - shadok.127.0.0.1.nip.io
+    secretName: nginx-test-tls
+  rules:
+  - host: shadok.127.0.0.1.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-test
+            port:
+              number: 80
+EOF
+    
+    # Attendre que le déploiement soit prêt
+    log_info "⏳ Attente que nginx soit prêt..."
+    kubectl wait --for=condition=available deployment/nginx-test -n test-nginx --timeout=60s
+    
+    log_success "🌐 Serveur nginx de test déployé avec ingress"
+    log_info "🔗 Accès: https://shadok.127.0.0.1.nip.io"
 }
 
 # Afficher les informations de configuration
@@ -339,20 +463,24 @@ show_config_info() {
     echo "  - 🌐 ingress-nginx (avec snippets activés)"
     echo "  - 📊 Kubernetes Dashboard (avec auto-login)"
     echo "  - 🧪 Pod curl-test (pour les tests)"
+    echo "  - 🌐 Serveur nginx de test (avec ingress)"
     echo ""
     log_info "🌐 Services disponibles:"
-    echo "  - Dashboard: http://dashboard.local"
+    echo "  - Dashboard: https://dashboard.127.0.0.1.nip.io"
+    echo "  - Test nginx: https://shadok.127.0.0.1.nip.io"
     echo "  - Ingress: http://localhost (port 80)"
     echo "  - Ingress HTTPS: https://localhost (port 443)"
     echo ""
     log_info "📋 Commandes utiles:"
     echo "  - kubectl get pods -A"
-    echo "  - kubectl exec -it curl-test -- curl http://dashboard.local"
+    echo "  - kubectl exec -it curl-test -- curl -H \"Host: shadok.127.0.0.1.nip.io\" https://ingress-nginx-controller.ingress-nginx.svc.cluster.local"
+    echo "  - kubectl exec -it curl-test -- curl -k https://dashboard.127.0.0.1.nip.io"
     echo "  - kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller"
     echo "  - kubectl get certificates"
     echo ""
-    log_info "🔧 Configuration /etc/hosts requise:"
-    echo "  echo '127.0.0.1 dashboard.local test.local' | sudo tee -a /etc/hosts"
+    log_info "🌐 Accès direct sans configuration:"
+    echo "  - Dashboard: https://dashboard.127.0.0.1.nip.io"
+    echo "  - Test nginx: https://shadok.127.0.0.1.nip.io"
     echo ""
     
     # Afficher l'état des pods
@@ -396,6 +524,21 @@ test_configuration() {
     else
         log_warning "⚠️  Kubernetes Dashboard non opérationnel"
     fi
+    
+    # Test du serveur nginx de test
+    if kubectl get pods -n test-nginx | grep -q "Running"; then
+        log_success "✅ Serveur nginx de test opérationnel"
+        
+        # Test de l'accès direct au service nginx
+        log_info "🌐 Test de l'accès au service nginx..."
+        if kubectl exec curl-test -- curl -s http://nginx-test.test-nginx.svc.cluster.local 2>/dev/null | grep -q "Shadok"; then
+            log_success "✅ Accès au serveur nginx via service réussi"
+        else
+            log_warning "⚠️  Impossible d'accéder au serveur nginx via service"
+        fi
+    else
+        log_warning "⚠️  Serveur nginx de test non opérationnel"
+    fi
 }
 
 # Fonction principale
@@ -410,7 +553,7 @@ main() {
     install_cert_manager
     echo ""
     
-    install_ingress_nginx
+    verify_ingress_nginx
     echo ""
     
     install_dashboard
@@ -420,6 +563,9 @@ main() {
     echo ""
     
     create_test_certificate
+    echo ""
+    
+    create_test_nginx_server
     echo ""
     
     test_configuration
