@@ -35,10 +35,28 @@ cd pods/quarkus-hello
 ./start.sh dev
 ```
 
+### Python Hello (`pods/python-hello/`)
+
+Application Python FastAPI simple avec :
+
+- **REST API** avec FastAPI et endpoints `/hello` et `/hello/json`
+- **Documentation automatique** Swagger/OpenAPI accessible sur `/docs`
+- **Container Image** optimisé avec Alpine Linux
+- **Live Reload** activé pour le développement
+- **Health Checks** configurés (`/health`)
+- **Tests** avec pytest
+
+**Démarrage rapide** :
+
+```bash
+cd pods/python-hello
+./start.sh dev
+```
+
 ### Applications futures
+
 - **Spring Boot** - Application avec Spring Boot Actuator
 - **Node.js** - Application Express.js
-- **Python** - Application FastAPI  
 - **Go** - Application avec Gin
 - **.NET** - Application ASP.NET Core
 

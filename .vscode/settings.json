@@ -2,5 +2,6 @@
     "cSpell.language": "en,fr",
     "cSpell.words": [
         "shadok"
-    ]
+    ],
+    "FSharp.suggestGitignore": false
 }

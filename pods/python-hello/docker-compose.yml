@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  python-hello:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=true
+      - KUBERNETES_NAMESPACE=local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "app.kubernetes.io/name=python-hello"
+      - "app.kubernetes.io/part-of=shadok-pods"
+    volumes:
+      - "./src:/app/src"  # Pour le live reload en développement

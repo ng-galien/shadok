@@ -7,6 +7,7 @@ Ce répertoire contient les applications de démonstration pour différents lang
 ### Quarkus Hello (`quarkus-hello/`)
 
 Une application Quarkus simple qui démontre :
+
 - REST API avec JAX-RS
 - Intégration Kubernetes native
 - Container Image avec Jib
@@ -16,11 +17,35 @@ Une application Quarkus simple qui démontre :
 **Endpoints** :
 - `GET /hello` - Message Hello World en texte
 - `GET /hello/json` - Message Hello World en JSON
-- `GET /health` - Health check
+- `GET /q/health` - Health check
 
 **Démarrage rapide** :
+
 ```bash
 cd quarkus-hello
+./start.sh dev
+```
+
+### Python Hello (`python-hello/`)
+
+Une application Python FastAPI simple qui démontre :
+
+- REST API avec FastAPI
+- Documentation Swagger/OpenAPI automatique
+- Container Image optimisé Alpine
+- Live Reload pour le développement
+- Health Checks et tests pytest
+
+**Endpoints** :
+- `GET /hello` - Message Hello World en texte
+- `GET /hello/json` - Message Hello World en JSON
+- `GET /health` - Health check
+- `GET /docs` - Documentation Swagger
+
+**Démarrage rapide** :
+
+```bash
+cd python-hello
 ./start.sh dev
 ```
 
@@ -28,7 +53,6 @@ cd quarkus-hello
 
 - **Spring Boot** - Application Spring Boot avec actuator
 - **Node.js** - Application Express.js
-- **Python** - Application FastAPI
 - **Go** - Application avec Gin
 - **.NET** - Application ASP.NET Core
 
