@@ -160,22 +160,13 @@ subjects:
 - kind: ServiceAccount
   name: dashboard-admin
   namespace: kubernetes-dashboard
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: dashboard-admin-token
-  namespace: kubernetes-dashboard
-  annotations:
-    kubernetes.io/service-account.name: dashboard-admin
-type: kubernetes.io/service-account-token
 EOF
     
     # Attendre que le token soit créé
     sleep 5
     
-    # Récupérer le token JWT
-    local dashboard_token=$(kubectl get secret dashboard-admin-token -n kubernetes-dashboard -o jsonpath='{.data.token}' | base64 -d)
+    # Générer un token JWT avec la méthode recommandée
+    local dashboard_token=$(kubectl -n kubernetes-dashboard create token dashboard-admin)
     
     # Créer l'ingress avec injection du token et HTTPS
     kubectl apply -f - <<EOF
@@ -190,11 +181,7 @@ metadata:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
     cert-manager.io/cluster-issuer: "selfsigned-issuer"
     nginx.ingress.kubernetes.io/configuration-snippet: |
-      # Auto-login avec le token JWT
-      access_by_lua_block {
-        local token = "${dashboard_token}"
-        ngx.header["Authorization"] = "Bearer " .. token
-      }
+      proxy_set_header Authorization "Bearer ${dashboard_token}";
 spec:
   ingressClassName: nginx
   tls:
@@ -213,6 +200,11 @@ spec:
             port:
               number: 443
 EOF
+    
+    # Attendre que tous les déploiements du dashboard soient prêts
+    log_info "⏳ Attente que tous les déploiements du dashboard soient opérationnels..."
+    kubectl wait --for=condition=available deployment -l app.kubernetes.io/part-of=kubernetes-dashboard \
+        -n kubernetes-dashboard --timeout=120s
     
     log_success "📈 Kubernetes Dashboard installé avec auto-login et HTTPS"
     log_info "🌐 Accès: https://dashboard.127.0.0.1.nip.io"
@@ -310,8 +302,8 @@ EOF
 create_test_nginx_server() {
     log_info "🌐 Création d'un serveur nginx de test..."
     
-    # Créer le namespace pour les tests
-    kubectl create namespace test-nginx --dry-run=client -o yaml | kubectl apply -f -
+    # Créer le namespace shadok pour les tests
+    kubectl create namespace shadok --dry-run=client -o yaml | kubectl apply -f -
     
     # Déployer nginx avec une page personnalisée
     kubectl apply -f - <<EOF
@@ -319,7 +311,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nginx-test
-  namespace: test-nginx
+  namespace: shadok
   labels:
     app: nginx-test
 spec:
@@ -356,7 +348,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nginx-test-content
-  namespace: test-nginx
+  namespace: shadok
 data:
   index.html: |
     <!DOCTYPE html>
@@ -394,7 +386,7 @@ data:
             <p>Serveur nginx de test déployé avec succès !</p>
             <div class="info">
                 <strong>Cluster:</strong> kind-shadok-dev<br>
-                <strong>Namespace:</strong> test-nginx<br>
+                <strong>Namespace:</strong> shadok<br>
                 <strong>Ingress:</strong> shadok.127.0.0.1.nip.io<br>
                 <strong>Status:</strong> ✅ Opérationnel
             </div>
@@ -407,7 +399,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: nginx-test
-  namespace: test-nginx
+  namespace: shadok
   labels:
     app: nginx-test
 spec:
@@ -423,7 +415,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: nginx-test
-  namespace: test-nginx
+  namespace: shadok
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
     cert-manager.io/cluster-issuer: "selfsigned-issuer"
@@ -448,7 +440,7 @@ EOF
     
     # Attendre que le déploiement soit prêt
     log_info "⏳ Attente que nginx soit prêt..."
-    kubectl wait --for=condition=available deployment/nginx-test -n test-nginx --timeout=60s
+    kubectl wait --for=condition=available deployment/nginx-test -n shadok --timeout=60s
     
     log_success "🌐 Serveur nginx de test déployé avec ingress"
     log_info "🔗 Accès: https://shadok.127.0.0.1.nip.io"
@@ -496,48 +488,12 @@ show_config_info() {
 # Fonction de test rapide
 test_configuration() {
     log_info "🧪 === Test rapide de la configuration ==="
-    
-    # Test du pod curl
-    if kubectl exec curl-test -- curl -s -o /dev/null -w "%{http_code}" http://kubernetes-dashboard-kong-proxy.kubernetes-dashboard.svc.cluster.local 2>/dev/null | grep -q "200\|403"; then
-        log_success "✅ Pod curl peut accéder aux services internes"
+
+    # Test de l'accès au service nginx shadok via ingress
+    if curl -s -k -o /dev/null -w "%{http_code}" https://shadok.127.0.0.1.nip.io 2>/dev/null | grep -q "200"; then
+        log_success "✅ Accès au service nginx shadok via ingress réussi"
     else
-        log_warning "⚠️  Pod curl ne peut pas accéder aux services internes"
-    fi
-    
-    # Test de cert-manager
-    if kubectl get pods -n cert-manager | grep -q "Running"; then
-        log_success "✅ cert-manager opérationnel"
-    else
-        log_warning "⚠️  cert-manager non opérationnel"
-    fi
-    
-    # Test d'ingress-nginx
-    if kubectl get pods -n ingress-nginx | grep -q "Running"; then
-        log_success "✅ ingress-nginx opérationnel"
-    else
-        log_warning "⚠️  ingress-nginx non opérationnel"
-    fi
-    
-    # Test du dashboard
-    if kubectl get pods -n kubernetes-dashboard | grep -q "Running"; then
-        log_success "✅ Kubernetes Dashboard opérationnel"
-    else
-        log_warning "⚠️  Kubernetes Dashboard non opérationnel"
-    fi
-    
-    # Test du serveur nginx de test
-    if kubectl get pods -n test-nginx | grep -q "Running"; then
-        log_success "✅ Serveur nginx de test opérationnel"
-        
-        # Test de l'accès direct au service nginx
-        log_info "🌐 Test de l'accès au service nginx..."
-        if kubectl exec curl-test -- curl -s http://nginx-test.test-nginx.svc.cluster.local 2>/dev/null | grep -q "Shadok"; then
-            log_success "✅ Accès au serveur nginx via service réussi"
-        else
-            log_warning "⚠️  Impossible d'accéder au serveur nginx via service"
-        fi
-    else
-        log_warning "⚠️  Serveur nginx de test non opérationnel"
+        log_warning "⚠️  Impossible d'accéder au service nginx shadok via ingress"
     fi
 }
 

@@ -76,13 +76,17 @@ cleanup_existing_cluster() {
     fi
 }
 
-# Nettoyer la registry existante si nécessaire
+# Nettoyer la registry existante si nécessaire (préserver les données)
 cleanup_existing_registry() {
     if docker ps -a --format '{{.Names}}' | grep -q "^${REGISTRY_NAME}$"; then
         log_warning "⚠️  Registry '${REGISTRY_NAME}' existante détectée"
-        log_info "🗑️  Suppression de la registry existante..."
-        docker rm -f "${REGISTRY_NAME}" || true
-        log_success "🧹 Registry existante supprimée"
+        if docker ps --format '{{.Names}}' | grep -q "^${REGISTRY_NAME}$"; then
+            log_info "⏹️  Arrêt de la registry existante..."
+            docker stop "${REGISTRY_NAME}" || true
+        fi
+        log_info "🗑️  Suppression du conteneur (données préservées)..."
+        docker rm "${REGISTRY_NAME}" || true
+        log_success "🧹 Conteneur registry supprimé (données conservées)"
     fi
 }
 
@@ -173,13 +177,22 @@ create_kind_cluster() {
 connect_registry_to_cluster() {
     log_info "🔗 Connexion de la registry au cluster..."
     
-    # Connecter la registry au réseau kind
-    if ! docker network ls | grep -q kind; then
-        log_error "❌ Réseau kind non trouvé"
-        exit 1
+    # Attendre que le cluster soit complètement initialisé
+    sleep 3
+    
+    # Vérifier si le réseau kind existe
+    if ! docker network ls | grep -q "kind"; then
+        log_warning "⚠️  Réseau kind non trouvé, tentative de création..."
+        # Le réseau devrait normalement être créé par kind, mais on peut le créer manuellement si besoin
+        docker network create kind --driver bridge || log_warning "Le réseau kind existe peut-être déjà"
     fi
     
-    docker network connect "kind" "${REGISTRY_NAME}" || true
+    # Connecter la registry au réseau kind
+    if docker network connect "kind" "${REGISTRY_NAME}" 2>/dev/null; then
+        log_success "🔗 Registry connectée au réseau kind"
+    else
+        log_warning "⚠️  Registry déjà connectée au réseau kind"
+    fi
     
     # Documenter la registry locale dans le cluster
     kubectl apply -f - <<EOF
