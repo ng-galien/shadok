@@ -1,0 +1,29 @@
+# Build directories
+build/
+target/
+
+# Gradle
+.gradle/
+gradlew
+gradlew.bat
+gradle/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Quarkus
+.quarkus/
+
+# Container
+.docker/

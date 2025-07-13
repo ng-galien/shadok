@@ -15,3 +15,31 @@ Il permet aux développeurs de travailler de manière interactive dans un cluste
 - Surveiller les changements et **redémarrer les pods intelligemment** si nécessaire.
 
 ---
+
+## 🧪 Applications de démonstration
+
+Le répertoire `pods/` contient des applications de démonstration pour différents langages et frameworks :
+
+### Quarkus Hello (`pods/quarkus-hello/`)
+
+Application Quarkus simple avec :
+- **REST API** avec endpoints `/hello` et `/hello/json`
+- **Intégration Kubernetes native** avec l'extension quarkus-kubernetes
+- **Container Image** automatique avec Jib
+- **Live Reload** activé pour le développement
+- **Health Checks** configurés (`/q/health/*`)
+
+**Démarrage rapide** :
+```bash
+cd pods/quarkus-hello
+./start.sh dev
+```
+
+### Applications futures
+- **Spring Boot** - Application avec Spring Boot Actuator
+- **Node.js** - Application Express.js
+- **Python** - Application FastAPI  
+- **Go** - Application avec Gin
+- **.NET** - Application ASP.NET Core
+
+---

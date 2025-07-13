@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  quarkus-hello:
+    build:
+      context: .
+      dockerfile: src/main/docker/Dockerfile.jvm
+    ports:
+      - "8080:8080"
+    environment:
+      - QUARKUS_HTTP_HOST=0.0.0.0
+      - QUARKUS_HTTP_PORT=8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "app.kubernetes.io/name=quarkus-hello"
+      - "app.kubernetes.io/part-of=shadok-pods"
