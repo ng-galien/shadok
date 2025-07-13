@@ -194,27 +194,63 @@ test_registry_config() {
     return 0
 }
 
+# Test des montages de pods sources
+test_pod_mounts() {
+    log_info "📁 === Test des montages de pods sources ==="
+    
+    # Vérifier que les répertoires sont montés dans les nodes
+    local control_plane_node="kind-${CLUSTER_NAME}-control-plane"
+    
+    if docker exec "$control_plane_node" test -d /pods 2>/dev/null; then
+        log_success "✅ Répertoire /pods monté dans le control-plane"
+        
+        # Lister les pods montés
+        local mounted_pods=$(docker exec "$control_plane_node" ls /pods 2>/dev/null | tr '\n' ' ')
+        if [ -n "$mounted_pods" ]; then
+            log_success "📂 Pods montés: $mounted_pods"
+            
+            # Vérifier quelques fichiers dans chaque pod
+            for pod in $mounted_pods; do
+                if docker exec "$control_plane_node" test -f "/pods/${pod}/README.md" 2>/dev/null; then
+                    log_success "📄 README.md trouvé dans ${pod}"
+                fi
+            done
+        else
+            log_warning "⚠️  Aucun pod monté dans /pods"
+        fi
+    else
+        log_error "❌ Répertoire /pods non monté dans le control-plane"
+        return 1
+    fi
+    
+    return 0
+}
+
 # Afficher le résumé des tests
 show_test_summary() {
     local registry_ok=$1
     local k8s_ok=$2
     local ingress_ok=$3
     local config_ok=$4
+    local mounts_ok=$5
     
     log_info "📊 === Résumé des tests ==="
     [ "$registry_ok" -eq 0 ] && log_success "✅ Registry locale" || log_error "❌ Registry locale"
     [ "$k8s_ok" -eq 0 ] && log_success "✅ Cluster Kubernetes" || log_error "❌ Cluster Kubernetes"
     [ "$ingress_ok" -eq 0 ] && log_success "✅ Ingress controller" || log_error "❌ Ingress controller"
     [ "$config_ok" -eq 0 ] && log_success "✅ Configuration registry" || log_error "❌ Configuration registry"
+    [ "$mounts_ok" -eq 0 ] && log_success "✅ Montages pods sources" || log_error "❌ Montages pods sources"
     
     echo ""
-    if [ "$registry_ok" -eq 0 ] && [ "$k8s_ok" -eq 0 ] && [ "$ingress_ok" -eq 0 ] && [ "$config_ok" -eq 0 ]; then
+    if [ "$registry_ok" -eq 0 ] && [ "$k8s_ok" -eq 0 ] && [ "$ingress_ok" -eq 0 ] && [ "$config_ok" -eq 0 ] && [ "$mounts_ok" -eq 0 ]; then
         log_success "🎉 Tous les tests sont passés avec succès !"
         echo "   ✨ L'environnement kind est complètement opérationnel."
+        echo "   📁 Les sources pods sont montées et accessibles."
     else
         log_error "💥 Certains tests ont échoué"
         echo "   🔍 Vérifiez les logs ci-dessus pour diagnostiquer les problèmes."
         echo "   🔧 Essayez de recréer l'environnement avec ./start-kind.sh"
+        echo "   📁 Pour vérifier les montages: ./check-pod-mounts.sh"
     fi
 }
 
@@ -227,6 +263,7 @@ main() {
     local k8s_result=1
     local ingress_result=1
     local config_result=1
+    local mounts_result=1
     
     # Exécuter les tests
     test_local_registry && registry_result=0
@@ -241,11 +278,14 @@ main() {
     test_registry_config && config_result=0
     echo ""
     
+    test_pod_mounts && mounts_result=0
+    echo ""
+    
     # Afficher le résumé
-    show_test_summary $registry_result $k8s_result $ingress_result $config_result
+    show_test_summary $registry_result $k8s_result $ingress_result $config_result $mounts_result
     
     # Code de sortie basé sur les résultats
-    if [ "$registry_result" -eq 0 ] && [ "$k8s_result" -eq 0 ] && [ "$ingress_result" -eq 0 ] && [ "$config_result" -eq 0 ]; then
+    if [ "$registry_result" -eq 0 ] && [ "$k8s_result" -eq 0 ] && [ "$ingress_result" -eq 0 ] && [ "$config_result" -eq 0 ] && [ "$mounts_result" -eq 0 ]; then
         exit 0
     else
         exit 1

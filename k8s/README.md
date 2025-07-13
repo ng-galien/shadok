@@ -25,10 +25,11 @@ Ce dossier contient les scripts et configurations pour l'environnement de dével
 
 | Script | Description | Usage |
 |--------|-------------|-------|
-| `start-kind.sh` | Démarre l'environnement kind complet | `./start-kind.sh [cluster-name]` |
+| `start-kind.sh` | Démarre l'environnement kind complet avec montages pods | `./start-kind.sh [cluster-name]` |
 | `stop-kind.sh` | Arrête et nettoie l'environnement | `./stop-kind.sh [cluster-name]` |
 | `status-kind.sh` | Vérifie le statut de l'environnement | `./status-kind.sh [cluster-name]` |
 | `test-kind.sh` | Teste toutes les fonctionnalités | `./test-kind.sh [cluster-name]` |
+| `check-pod-mounts.sh` | Vérifie les montages des sources pods | `./check-pod-mounts.sh [cluster-name]` |
 
 ## 📋 Fonctionnalités
 
@@ -49,6 +50,13 @@ Ce dossier contient les scripts et configurations pour l'environnement de dével
 - **Ingress Controller** NGINX préinstallé
 - **Port forwarding** configuré (80, 443)
 - **Multi-node** : 1 control-plane + 2 workers
+
+### 📁 Montages des sources pods
+
+- **Montage automatique** des répertoires pods en readonly
+- **PersistentVolumes** créés automatiquement pour chaque pod
+- **PersistentVolumeClaims** prêts à utiliser
+- **Accès depuis les containers** via `/pods/{pod-name}`
 
 ## 🔧 Configuration
 
@@ -219,3 +227,51 @@ Le script est conçu pour être utilisé dans des pipelines CI/CD :
 - [Kind Documentation](https://kind.sigs.k8s.io/)
 - [Local Registry Guide](https://kind.sigs.k8s.io/docs/user/local-registry/)
 - [Ingress Controller](https://kind.sigs.k8s.io/docs/user/ingress/)
+
+## 📁 Utilisation des montages de sources pods
+
+### Accès aux sources pods
+
+Les sources de chaque pod sont automatiquement montées dans le cluster kind :
+
+```bash
+# Lister les PersistentVolumes des sources
+kubectl get pv -l app=shadok
+
+# Lister les PersistentVolumeClaims
+kubectl get pvc -l app=shadok
+
+# Exemple d'utilisation dans un deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mon-app
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        image: mon-image
+        volumeMounts:
+        - name: sources
+          mountPath: /app/sources
+          readOnly: true
+      volumes:
+      - name: sources
+        persistentVolumeClaim:
+          claimName: pvc-node-hello-sources
+```
+
+### Vérification des montages
+
+```bash
+# Vérifier les montages dans les nodes
+./check-pod-mounts.sh
+
+# Accès direct aux montages
+docker exec kind-shadok-dev-control-plane ls /pods/
+
+# Test depuis un pod
+kubectl run test --image=busybox --rm -it -- sh
+# ls /pods/
+```

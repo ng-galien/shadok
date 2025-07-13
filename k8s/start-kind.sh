@@ -11,6 +11,16 @@ REGISTRY_NAME="shadok-registry"
 REGISTRY_PORT="5001"
 GITHUB_REGISTRY="ghcr.io"
 
+# Chemin vers le répertoire des pods (relatif au script)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PODS_DIR="$(dirname "${SCRIPT_DIR}")/pods"
+
+# Validation du répertoire pods
+if [ ! -d "${PODS_DIR}" ]; then
+    echo "❌ Erreur: Répertoire pods non trouvé: ${PODS_DIR}"
+    exit 1
+fi
+
 # Couleurs pour les logs
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -93,6 +103,24 @@ create_local_registry() {
 create_kind_config() {
     log_info "⚙️  Création de la configuration kind..."
     
+    # Découvrir automatiquement les pods disponibles
+    local pods_mounts=""
+    for pod_dir in "${PODS_DIR}"/*/; do
+        if [ -d "$pod_dir" ]; then
+            local pod_name=$(basename "$pod_dir")
+            # Ignorer les répertoires build et node_modules
+            if [[ "$pod_name" != "build" && "$pod_name" != "node_modules" ]]; then
+                pods_mounts="${pods_mounts}  - hostPath: ${pod_dir}
+    containerPath: /pods/${pod_name}
+    readOnly: true
+"
+            fi
+        fi
+    done
+    
+    log_info "📁 Montage des répertoires pods détectés :"
+    echo "${pods_mounts}" | grep "hostPath:" | sed 's/.*hostPath: /  - /'
+    
     cat > /tmp/kind-config.yaml <<EOF
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
@@ -112,8 +140,14 @@ nodes:
   - containerPort: 443
     hostPort: 443
     protocol: TCP
+  extraMounts:
+${pods_mounts}
 - role: worker
+  extraMounts:
+${pods_mounts}
 - role: worker
+  extraMounts:
+${pods_mounts}
 containerdConfigPatches:
 - |-
   [plugins."io.containerd.grpc.v1.cri".registry]
@@ -182,6 +216,65 @@ install_controllers() {
     log_success "🌐 Contrôleurs installés"
 }
 
+# Créer les PersistentVolumes pour les pods sources
+create_pod_persistent_volumes() {
+    log_info "💾 Création des PersistentVolumes pour les sources pods..."
+    
+    for pod_dir in "${PODS_DIR}"/*/; do
+        if [ -d "$pod_dir" ]; then
+            local pod_name=$(basename "$pod_dir")
+            # Ignorer les répertoires build et node_modules
+            if [[ "$pod_name" != "build" && "$pod_name" != "node_modules" ]]; then
+                log_info "📁 Création du PV pour ${pod_name}..."
+                
+                kubectl apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-${pod_name}-sources
+  labels:
+    app: shadok
+    pod: ${pod_name}
+    type: sources
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /pods/${pod_name}
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-${pod_name}-sources
+  namespace: default
+  labels:
+    app: shadok
+    pod: ${pod_name}
+    type: sources
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-storage
+  selector:
+    matchLabels:
+      pod: ${pod_name}
+      type: sources
+EOF
+            fi
+        fi
+    done
+    
+    log_success "✅ PersistentVolumes créés pour les sources pods"
+}
+
 # Afficher les informations finales
 show_cluster_info() {
     log_success "🎉 === Cluster kind '${CLUSTER_NAME}' prêt ! ==="
@@ -191,10 +284,25 @@ show_cluster_info() {
     echo "  - 📦 Registry locale: localhost:${REGISTRY_PORT}"
     echo "  - 🐙 GitHub registry mirror: ${GITHUB_REGISTRY}"
     echo ""
-    log_info "📋 Commandes utiles:"
+    log_info "� Pods sources montés (readonly):"
+    for pod_dir in "${PODS_DIR}"/*/; do
+        if [ -d "$pod_dir" ]; then
+            local pod_name=$(basename "$pod_dir")
+            if [[ "$pod_name" != "build" && "$pod_name" != "node_modules" ]]; then
+                echo "  - 📂 ${pod_name}: /pods/${pod_name}"
+            fi
+        fi
+    done
+    echo ""
+    log_info "�📋 Commandes utiles:"
     echo "  - kubectl cluster-info"
     echo "  - kubectl get nodes"
+    echo "  - kubectl get pv,pvc"
     echo "  - docker push localhost:${REGISTRY_PORT}/mon-image:tag"
+    echo ""
+    log_info "💾 PersistentVolumes:"
+    echo "  - kubectl get pv -l app=shadok"
+    echo "  - kubectl get pvc -l app=shadok"
     echo ""
     log_info "🧹 Pour nettoyer:"
     echo "  - kind delete cluster --name ${CLUSTER_NAME}"
@@ -203,6 +311,13 @@ show_cluster_info() {
     
     # Afficher l'état des nodes
     kubectl get nodes -o wide
+    echo ""
+    
+    # Afficher l'état des PV/PVC
+    log_info "📊 État des PersistentVolumes:"
+    kubectl get pv -l app=shadok 2>/dev/null || log_warning "Aucun PV shadok trouvé"
+    echo ""
+    kubectl get pvc -l app=shadok 2>/dev/null || log_warning "Aucun PVC shadok trouvé"
 }
 
 # Fonction principale
@@ -222,6 +337,7 @@ main() {
     create_kind_cluster
     connect_registry_to_cluster
     install_controllers
+    create_pod_persistent_volumes
     
     # Nettoyer le fichier de config temporaire
     rm -f /tmp/kind-config.yaml
