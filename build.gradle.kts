@@ -320,6 +320,202 @@ tasks.register("setupPython") {
 }
 
 // =========================
+// Node.js Pods Management  
+// =========================
+
+val nodePodDir = file("pods/node-hello")
+val nodeModulesDir = file("$nodePodDir/node_modules")
+
+// Task to check if Node.js is available
+tasks.register("checkNode", Exec::class) {
+    group = "node-pods"
+    description = "Check if Node.js is available"
+    
+    commandLine = listOf("node", "--version")
+    
+    doFirst {
+        println("🟢 Checking Node.js availability...")
+    }
+    
+    doLast {
+        println("✅ Node.js is available")
+    }
+}
+
+// Task to install Node.js dependencies
+tasks.register("installNodeDeps", Exec::class) {
+    group = "node-pods"
+    description = "Install Node.js dependencies for node-hello pod"
+    dependsOn("checkNode")
+    
+    onlyIf { !nodeModulesDir.exists() }
+    
+    workingDir = nodePodDir
+    commandLine = listOf("npm", "install")
+    
+    doFirst {
+        println("📦 Installing Node.js dependencies...")
+    }
+    
+    doLast {
+        println("✅ Dependencies installed at ${nodeModulesDir.absolutePath}")
+    }
+}
+
+// Task to run Node.js tests
+tasks.register("runNodeTests", Exec::class) {
+    group = "node-pods"
+    description = "Run tests for node-hello pod"
+    dependsOn("installNodeDeps")
+    
+    workingDir = nodePodDir
+    commandLine = listOf("npm", "test")
+    
+    doFirst {
+        println("🧪 Running Node.js tests...")
+    }
+    
+    doLast {
+        println("✅ Node.js tests completed")
+    }
+}
+
+// Task to run Node.js in development mode
+tasks.register("runNodeDev", Exec::class) {
+    group = "node-pods"
+    description = "Run node-hello pod in development mode with live reload"
+    dependsOn("installNodeDeps")
+    
+    workingDir = nodePodDir
+    commandLine = listOf("npm", "run", "dev")
+    
+    doFirst {
+        println("🔧 Starting Node.js development server with live reload...")
+        println("🌐 Server will be available at http://localhost:3000")
+        println("🔄 Live reload enabled with nodemon")
+        println("💡 Press Ctrl+C to stop")
+    }
+}
+
+// Task to run Node.js in production mode
+tasks.register("runNode", Exec::class) {
+    group = "node-pods"
+    description = "Run node-hello pod in production mode"
+    dependsOn("installNodeDeps")
+    
+    workingDir = nodePodDir
+    commandLine = listOf("npm", "start")
+    
+    doFirst {
+        println("🚀 Starting Node.js production server...")
+        println("🌐 Server will be available at http://localhost:3000")
+    }
+}
+
+// Task to build Node.js Docker image
+tasks.register("buildNodeImage", Exec::class) {
+    group = "node-pods"
+    description = "Build Docker image for node-hello pod"
+    
+    workingDir = nodePodDir
+    commandLine = listOf("docker", "build", "-t", "node-hello:latest", ".")
+    
+    doFirst {
+        println("🐳 Building Node.js Docker image...")
+    }
+    
+    doLast {
+        println("✅ Docker image 'node-hello:latest' built successfully")
+    }
+}
+
+// Task to run Node.js with Docker
+tasks.register("runNodeDocker", Exec::class) {
+    group = "node-pods"
+    description = "Run node-hello pod with Docker"
+    dependsOn("buildNodeImage")
+    
+    commandLine = listOf("docker", "run", "-p", "3000:3000", "--rm", "node-hello:latest")
+    
+    doFirst {
+        println("🐳 Starting Node.js with Docker...")
+        println("🌐 Server will be available at http://localhost:3000")
+        println("💡 Press Ctrl+C to stop")
+    }
+}
+
+// Task to test Node.js endpoints
+tasks.register("testNodeEndpoints", Exec::class) {
+    group = "node-pods"
+    description = "Test node-hello pod endpoints"
+    
+    workingDir = nodePodDir
+    commandLine = listOf("./test-endpoints.sh")
+    
+    doFirst {
+        println("🧪 Testing Node.js endpoints...")
+        println("💡 Make sure the server is running first")
+    }
+}
+
+// Task to lint Node.js code
+tasks.register("lintNode", Exec::class) {
+    group = "node-pods"
+    description = "Lint node-hello pod code"
+    dependsOn("installNodeDeps")
+    
+    workingDir = nodePodDir
+    commandLine = listOf("npm", "run", "lint")
+    
+    doFirst {
+        println("🔍 Linting Node.js code...")
+    }
+}
+
+// Task to show Node.js pod status
+tasks.register("nodeStatus") {
+    group = "node-pods"
+    description = "Show status of node-hello pod"
+    
+    doLast {
+        println("🟢 NODE.JS HELLO WORLD STATUS")
+        println("=".repeat(40))
+        println("📁 Directory: ${nodePodDir.absolutePath}")
+        println("📦 Dependencies: ${if (nodeModulesDir.exists()) "✅ Installed" else "❌ Not installed"}")
+        println("🔧 package.json: ${if (file("$nodePodDir/package.json").exists()) "✅ Found" else "❌ Missing"}")
+        println("📄 Source code: ${if (file("$nodePodDir/src/app.js").exists()) "✅ Found" else "❌ Missing"}")
+        println("🧪 Tests: ${if (file("$nodePodDir/tests").exists()) "✅ Found" else "❌ Missing"}")
+        println("🐳 Dockerfile: ${if (file("$nodePodDir/Dockerfile").exists()) "✅ Found" else "❌ Missing"}")
+        println("")
+        println("🎯 Quick commands:")
+        println("   ./gradlew installNodeDeps  # Install dependencies")
+        println("   ./gradlew runNodeTests     # Run tests")
+        println("   ./gradlew runNodeDev       # Dev mode with live reload")
+        println("   ./gradlew runNode          # Production mode")
+        println("   ./gradlew buildNodeImage   # Build Docker image")
+        println("🧪 Tests: Run './gradlew runNodeTests' to execute")
+        println("🚀 Dev mode: Run './gradlew runNodeDev' to start")
+        println("🐳 Docker: Run './gradlew runNodeDocker' to start with Docker")
+        println("=".repeat(40))
+    }
+}
+
+// Aggregate task for complete Node.js setup
+tasks.register("setupNode") {
+    group = "node-pods"
+    description = "Complete setup of node-hello pod (install deps and run tests)"
+    dependsOn("runNodeTests")
+    
+    doLast {
+        println("🎉 Node.js Hello World pod setup completed!")
+        println("💡 Next steps:")
+        println("   - Run dev mode: ./gradlew runNodeDev")
+        println("   - Build Docker: ./gradlew buildNodeImage") 
+        println("   - Check status: ./gradlew nodeStatus")
+    }
+}
+
+// =========================
 // Quarkus Pods Management  
 // =========================
 
@@ -414,7 +610,7 @@ tasks.register("cleanQuarkusPod", GradleBuild::class) {
 tasks.register("buildAllPods") {
     group = "pods"
     description = "Build all demonstration pods"
-    dependsOn("buildQuarkusPod", "buildPythonImage")
+    dependsOn("buildQuarkusPod", "buildPythonImage", "buildNodeImage")
     
     doLast {
         println("🎉 All pods built successfully!")
@@ -425,7 +621,7 @@ tasks.register("buildAllPods") {
 tasks.register("testAllPods") {
     group = "pods"
     description = "Run tests for all demonstration pods"
-    dependsOn("testQuarkusPod", "runPythonTests")
+    dependsOn("testQuarkusPod", "runPythonTests", "runNodeTests")
     
     doLast {
         println("🎉 All pod tests completed successfully!")
@@ -449,6 +645,10 @@ tasks.register("setupAllPods") {
         println("   🐍 Python Hello World (FastAPI)")
         println("      - Dev mode: ./gradlew runPythonDev") 
         println("      - URL: http://localhost:8000")
+        println("")
+        println("   🟢 Node.js Hello World (Express)")
+        println("      - Dev mode: ./gradlew runNodeDev") 
+        println("      - URL: http://localhost:3000")
         println("")
         println("💡 Use './gradlew tasks --group pods' to see all pod tasks")
     }
@@ -476,12 +676,19 @@ tasks.register("podsStatus") {
         println("   📦 Dependencies: ${if (file("$pythonVenvDir/pyvenv.cfg").exists()) "✅ Installed" else "❌ Not installed"}")
         println("")
         
+        println("🟢 NODE.JS HELLO WORLD")
+        println("   📁 Directory: ${nodePodDir.absolutePath}")
+        println("   📦 Dependencies: ${if (nodeModulesDir.exists()) "✅ Installed" else "❌ Not installed"}")
+        println("   🔧 package.json: ${if (file("$nodePodDir/package.json").exists()) "✅ Found" else "❌ Missing"}")
+        println("")
+        
         println("🎯 Quick commands:")
         println("   ./gradlew setupAllPods     # Setup everything")
         println("   ./gradlew testAllPods      # Test all pods")
         println("   ./gradlew buildAllPods     # Build all pods")
         println("   ./gradlew runQuarkusDev    # Start Quarkus")
         println("   ./gradlew runPythonDev     # Start Python")
+        println("   ./gradlew runNodeDev       # Start Node.js")
         println("=".repeat(50))
     }
 }
@@ -539,24 +746,49 @@ tasks.register("podsHelp") {
         println("      GET /openapi.json               # OpenAPI specification")
         println("")
         
-        println("🛠 DEVELOPMENT WORKFLOW")
+        println("� NODE.JS POD (Express)")
+        println("   📂 Location: pods/node-hello/")
+        println("   🔧 Technology: Node.js 18 + Express")
+        println("   📋 Commands:")
+        println("      ./gradlew setupNode             # Complete setup")
+        println("      ./gradlew checkNode             # Check Node.js availability")
+        println("      ./gradlew installNodeDeps       # Install dependencies")
+        println("      ./gradlew runNodeTests          # Run tests")
+        println("      ./gradlew runNodeDev            # Dev mode (port 3000)")
+        println("      ./gradlew runNode               # Production mode")
+        println("      ./gradlew buildNodeImage        # Build Docker image")
+        println("      ./gradlew runNodeDocker         # Run with Docker")
+        println("      ./gradlew nodeStatus            # Show detailed status")
+        println("      ./gradlew lintNode              # Lint code")
+        println("   🌐 Endpoints (http://localhost:3000):")
+        println("      GET /                           # Service info")
+        println("      GET /hello                      # Text response")
+        println("      GET /hello/json                 # JSON response")
+        println("      GET /health                     # Health check")
+        println("      GET /ready                      # Readiness check")
+        println("")
+        
+        println("�🛠 DEVELOPMENT WORKFLOW")
         println("   1. Setup: ./gradlew setupAllPods")
         println("   2. Check: ./gradlew podsStatus")
         println("   3. Test:  ./gradlew testAllPods")
         println("   4. Dev:   ./gradlew runQuarkusDev  (terminal 1)")
         println("   5. Dev:   ./gradlew runPythonDev   (terminal 2)")
-        println("   6. Open:  http://localhost:8080 and http://localhost:8000")
+        println("   6. Dev:   ./gradlew runNodeDev     (terminal 3)")
+        println("   7. Open:  http://localhost:8080, http://localhost:8000, http://localhost:3000")
         println("")
         
         println("📚 TASK GROUPS")
         println("   ./gradlew tasks --group pods           # All pod tasks")
         println("   ./gradlew tasks --group quarkus-pods   # Quarkus specific")
         println("   ./gradlew tasks --group python-pods    # Python specific")
+        println("   ./gradlew tasks --group node-pods      # Node.js specific")
         println("")
         
         println("💡 TIPS")
-        println("   • Both applications support live reload for development")
+        println("   • All applications support live reload for development")
         println("   • Python tests include async endpoint testing")
+        println("   • Node.js includes live reload with nodemon")
         println("   • Quarkus generates K8s manifests automatically")
         println("   • All containers are based on optimized images")
         println("   • Use Ctrl+C to stop development servers")

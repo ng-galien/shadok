@@ -23,39 +23,44 @@ Pour déployer le webhook, vous devez :
    application-config mountPath: /config/application.yml subPath:
    config/application.yml labels: app-type: "microservice" team: "backend"
 
-````
-
-**Note sur `initContainerMounts`** : Ce champ permet de monter des fichiers spécifiques issus du volume `ProjectSource` dans un `initContainer`, en utilisant le champ `subPath`. Cela permet par exemple d'injecter un changelog Liquibase ou des fichiers de configuration sans avoir à créer une `ConfigMap`.
-
-#### Statut Applicationumes de code source et les caches de dépendances pour différents types d'applications.
+**Note sur `initContainerMounts`** : Ce champ permet de monter des fichiers
+spécifiques issus du volume `ProjectSource` dans un `initContainer`, en
+utilisant le champ `subPath`. Cela permet par exemple d'injecter un changelog
+Liquibase ou des fichiers de configuration sans avoir à créer une `ConfigMap`.
 
 ## Vue d'ensemble
 
-L'opérateur Shadok propose trois Custom Resource Definitions (CRDs) principales :
+L'opérateur Shadok propose trois Custom Resource Definitions (CRDs) principales
+:
 
 - **ProjectSource** : Gère les volumes de code source en lecture seule
 - **DependencyCache** : Gère les caches de dépendances partagés
-- **Application** : Orchestre ProjectSource et DependencyCache selon le type d'application
+- **Application** : Orchestre ProjectSource et DependencyCache selon le type
+  d'application
 
-Il inclut également un webhook de mutation pour automatiser l'injection de volumes dans les Deployments.
+Il inclut également un webhook de mutation pour automatiser l'injection de
+volumes dans les Deployments.
 
 ## Custom Resource Definitions (CRDs)
 
 ### ProjectSource
 
-Le CRD `ProjectSource` permet de créer un PVC (PersistentVolumeClaim) en lecture seule à partir d'un PV (PersistentVolume) existant avec un chemin spécifique pour monter les sources d'un projet pour le développement en direct dans Kubernetes.
+Le CRD `ProjectSource` permet de créer un PVC (PersistentVolumeClaim) en lecture
+seule à partir d'un PV (PersistentVolume) existant avec un chemin spécifique
+pour monter les sources d'un projet pour le développement en direct dans
+Kubernetes.
 
 #### Spécification
 
-| Champ | Description | Requis | Valeur par défaut |
-|-------|-------------|---------|------------------|
-| `persistentVolumeName` | Nom du PersistentVolume existant | ✅ | - |
-| `sourcePath` | Chemin dans le PersistentVolume où se trouvent les sources du projet | ✅ | - |
-| `pvcName` | Nom du PersistentVolumeClaim à créer | ✅ | - |
-| `storageSize` | Taille de stockage à allouer (ex: "1Gi", "500Mi") | ❌ | "1Gi" |
-| `storageClass` | Classe de stockage pour le PVC | ❌ | "standard" |
-| `accessMode` | Mode d'accès pour le PVC | ❌ | "ReadOnlyMany" |
-| `labels` | Labels optionnels à appliquer au PVC créé | ❌ | {} |
+| Champ                  | Description                                                          | Requis | Valeur par défaut |
+| ---------------------- | -------------------------------------------------------------------- | ------ | ----------------- |
+| `persistentVolumeName` | Nom du PersistentVolume existant                                     | ✅     | -                 |
+| `sourcePath`           | Chemin dans le PersistentVolume où se trouvent les sources du projet | ✅     | -                 |
+| `pvcName`              | Nom du PersistentVolumeClaim à créer                                 | ✅     | -                 |
+| `storageSize`          | Taille de stockage à allouer (ex: "1Gi", "500Mi")                    | ❌     | "1Gi"             |
+| `storageClass`         | Classe de stockage pour le PVC                                       | ❌     | "standard"        |
+| `accessMode`           | Mode d'accès pour le PVC                                             | ❌     | "ReadOnlyMany"    |
+| `labels`               | Labels optionnels à appliquer au PVC créé                            | ❌     | {}                |
 
 ```yaml
 apiVersion: shadok.org/v1
@@ -68,11 +73,11 @@ spec:
   sourcePath: "/sources/my-app"
   pvcName: "my-app-sources"
   storageSize: "2Gi"
-  storageClass: "fast-ssd"  # optionnel
+  storageClass: "fast-ssd" # optionnel
   labels:
     environment: "development"
     team: "backend"
-````
+```
 
 #### Statut ProjectSource
 
