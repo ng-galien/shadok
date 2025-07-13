@@ -10,7 +10,7 @@ gradle = "8.11.1"
 java = "21"
 
 # Frameworks and platforms
-quarkus = "3.24.3"
+quarkus = "3.23.2"
 quarkus-operator-sdk = "7.2.0"
 
 # Kubernetes and Operator SDK
@@ -36,6 +36,7 @@ quarkus-operator-sdk-bom = { module = "io.quarkiverse.operatorsdk:quarkus-operat
 # Quarkus core
 quarkus-arc = { module = "io.quarkus:quarkus-arc" }
 quarkus-rest = { module = "io.quarkus:quarkus-rest" }
+quarkus-rest-jackson = { module = "io.quarkus:quarkus-rest-jackson" }
 quarkus-operator-sdk = { module = "io.quarkiverse.operatorsdk:quarkus-operator-sdk" }
 
 # Kubernetes
@@ -52,7 +53,7 @@ rest-assured = { module = "io.rest-assured:rest-assured" }
 
 [bundles]
 # Bundle groups for common dependency sets
-quarkus-core = ["quarkus-arc", "quarkus-rest"]
+quarkus-core = ["quarkus-arc", "quarkus-rest", "quarkus-rest-jackson"]
 kubernetes = ["kubernetes-client", "kubernetes-webhooks-core"]
 testing = ["quarkus-junit5", "rest-assured"]
 

@@ -8,12 +8,9 @@ pluginManagement {
         gradlePluginPortal()
     }
     
-    val quarkusVersion: String by settings
-    val spotlessVersion: String by settings
-    
     plugins {
-        id("io.quarkus") version quarkusVersion
-        id("com.diffplug.spotless") version spotlessVersion
+        id("io.quarkus") version "3.23.2"
+        id("com.diffplug.spotless") version "6.25.0"
     }
 }
 

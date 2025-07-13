@@ -1,6 +1,6 @@
 plugins {
     `java-platform`
-    id("com.diffplug.spotless") version "6.25.0" apply false
+    alias(libs.plugins.spotless) apply false
 }
 
 description = "Shadok Parent - BOM for dependency management"
@@ -11,12 +11,12 @@ javaPlatform {
 
 dependencies {
     // Import external BOMs
-    api(platform("io.quarkus.platform:quarkus-bom:${findProperty("quarkusVersion")}"))
-    api(platform("io.quarkiverse.operatorsdk:quarkus-operator-sdk-bom:${findProperty("quarkusOperatorSdkVersion")}"))
+    api(platform(libs.quarkus.bom))
+    api(platform(libs.quarkus.operator.sdk.bom))
     
     constraints {
         // Additional dependencies
-        api("io.javaoperatorsdk:kubernetes-webhooks-framework-core:${findProperty("josdkWebhooksVersion")}")
+        api(libs.kubernetes.webhooks.core)
     }
 }
 
@@ -31,7 +31,7 @@ subprojects {
     
     configure<JavaPluginExtension> {
         toolchain {
-            languageVersion.set(JavaLanguageVersion.of(findProperty("javaVersion") as String))
+            languageVersion.set(JavaLanguageVersion.of(21))
         }
         withSourcesJar()
     }

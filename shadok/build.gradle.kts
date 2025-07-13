@@ -1,6 +1,6 @@
 plugins {
     java
-    id("io.quarkus")
+    alias(libs.plugins.quarkus)
 }
 
 description = "Shadok - Kubernetes Live Development Operator"
@@ -9,23 +9,18 @@ dependencies {
     // Import parent BOM for version management
     implementation(platform(project(":")))
     
-    // Quarkus dependencies
-    implementation("io.quarkus:quarkus-arc")
-    implementation("io.quarkus:quarkus-rest")
-    implementation("io.quarkiverse.operatorsdk:quarkus-operator-sdk")
+    // Quarkus dependencies (using bundles)
+    implementation(libs.bundles.quarkus.core)
+    implementation(libs.quarkus.operator.sdk)
     
-    // Kubernetes client
-    implementation("io.fabric8:kubernetes-client")
+    // Kubernetes dependencies (using bundles)
+    implementation(libs.bundles.kubernetes)
     
     // Jackson for JSON processing
-    implementation("com.fasterxml.jackson.core:jackson-annotations")
+    implementation(libs.jackson.annotations)
     
-    // Webhook framework
-    implementation("io.javaoperatorsdk:kubernetes-webhooks-framework-core")
-    
-    // Test dependencies
-    testImplementation("io.quarkus:quarkus-junit5")
-    testImplementation("io.rest-assured:rest-assured")
+    // Test dependencies (using bundles)
+    testImplementation(libs.bundles.testing)
 }
 
 quarkus {
