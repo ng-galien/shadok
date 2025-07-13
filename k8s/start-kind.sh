@@ -339,6 +339,15 @@ main() {
     install_controllers
     create_pod_persistent_volumes
     
+    # Configuration avancée du cluster
+    log_info "🔧 Lancement de la configuration avancée..."
+    if [ -x "./kind-config.sh" ]; then
+        ./kind-config.sh "${CLUSTER_NAME}"
+    else
+        log_warning "⚠️  Script kind-config.sh non trouvé ou non exécutable"
+        log_info "   Lancez manuellement: ./kind-config.sh ${CLUSTER_NAME}"
+    fi
+    
     # Nettoyer le fichier de config temporaire
     rm -f /tmp/kind-config.yaml
     

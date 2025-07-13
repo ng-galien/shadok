@@ -8,17 +8,23 @@ Ce dossier contient les scripts et configurations pour l'environnement de dével
 # Démarrer kind avec la configuration par défaut
 ./start-kind.sh
 
+# Configuration avancée (cert-manager, dashboard, etc.)
+./kind-config.sh
+
 # Vérifier le statut de l'environnement
 ./status-kind.sh
 
 # Tester l'environnement complet
 ./test-kind.sh
 
+# Tester les composants avancés
+./test-kind-config.sh
+
+# Vérifier les montages des sources pods
+./check-pod-mounts.sh
+
 # Arrêter et nettoyer l'environnement
 ./stop-kind.sh
-
-# Démarrer avec un nom de cluster personnalisé
-./start-kind.sh mon-cluster
 ```
 
 ## 📋 Scripts disponibles
@@ -26,9 +32,11 @@ Ce dossier contient les scripts et configurations pour l'environnement de dével
 | Script | Description | Usage |
 |--------|-------------|-------|
 | `start-kind.sh` | Démarre l'environnement kind complet avec montages pods | `./start-kind.sh [cluster-name]` |
+| `kind-config.sh` | Configure les composants avancés (cert-manager, dashboard, etc.) | `./kind-config.sh [cluster-name]` |
 | `stop-kind.sh` | Arrête et nettoie l'environnement | `./stop-kind.sh [cluster-name]` |
 | `status-kind.sh` | Vérifie le statut de l'environnement | `./status-kind.sh [cluster-name]` |
-| `test-kind.sh` | Teste toutes les fonctionnalités | `./test-kind.sh [cluster-name]` |
+| `test-kind.sh` | Teste toutes les fonctionnalités de base | `./test-kind.sh [cluster-name]` |
+| `test-kind-config.sh` | Teste les composants avancés | `./test-kind-config.sh [cluster-name]` |
 | `check-pod-mounts.sh` | Vérifie les montages des sources pods | `./check-pod-mounts.sh [cluster-name]` |
 
 ## 📋 Fonctionnalités
@@ -274,4 +282,56 @@ docker exec kind-shadok-dev-control-plane ls /pods/
 # Test depuis un pod
 kubectl run test --image=busybox --rm -it -- sh
 # ls /pods/
+```
+
+## 🛠️ Composants avancés
+
+- **cert-manager** - Gestion automatique des certificats TLS
+- **ingress-nginx** - Contrôleur d'ingress avec snippets activés  
+- **Kubernetes Dashboard** - Interface web avec auto-login JWT
+- **Pod curl-test** - Conteneur de test pour diagnostics réseau
+- **Certificats auto-signés** - Pour développement et tests
+
+### Configuration avancée avec Helm
+
+Le script `kind-config.sh` installe automatiquement tous les composants essentiels :
+
+```bash
+# Installation automatique lors du démarrage
+./start-kind.sh  # Appelle automatiquement kind-config.sh
+
+# Installation manuelle
+./kind-config.sh
+
+# Test des composants avancés
+./test-kind-config.sh
+```
+
+#### Composants installés
+
+```bash
+# cert-manager (v1.13.2)
+helm repo add jetstack https://charts.jetstack.io
+helm install cert-manager jetstack/cert-manager --namespace cert-manager
+
+# ingress-nginx avec snippets
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm install ingress-nginx ingress-nginx/ingress-nginx --set controller.allowSnippetAnnotations=true
+
+# Kubernetes Dashboard avec auto-login
+helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+# + Ingress avec snippet JWT automatique
+```
+
+#### Accès aux services
+
+```bash
+# Ajouter à /etc/hosts
+echo '127.0.0.1 dashboard.local test.local' | sudo tee -a /etc/hosts
+
+# Accès au dashboard (auto-login activé)
+open http://dashboard.local
+
+# Tests avec curl
+kubectl exec -it curl-test -- curl http://dashboard.local
 ```
