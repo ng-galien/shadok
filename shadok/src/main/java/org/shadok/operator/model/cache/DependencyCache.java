@@ -8,11 +8,12 @@ import io.fabric8.kubernetes.model.annotation.Version;
 
 /**
  * DependencyCache Custom Resource Definition.
- * 
- * This CRD allows creating a PVC dedicated to caching dependencies (like Maven's m2 repository)
+ *
+ * <p>This CRD allows creating a PVC dedicated to caching dependencies (like Maven's m2 repository)
  * that can be shared between multiple applications.
- * 
- * Example usage:
+ *
+ * <p>Example usage:
+ *
  * <pre>
  * apiVersion: shadok.org/v1
  * kind: DependencyCache
@@ -30,13 +31,10 @@ import io.fabric8.kubernetes.model.annotation.Version;
 @Version("v1")
 @Kind("DependencyCache")
 public class DependencyCache extends CustomResource<DependencyCacheSpec, DependencyCacheStatus>
-        implements Namespaced {
+    implements Namespaced {
 
-    /**
-     * Default constructor required for deserialization.
-     */
-    public DependencyCache() {
-        super();
-    }
-
+  /** Default constructor required for deserialization. */
+  public DependencyCache() {
+    super();
+  }
 }

@@ -8,11 +8,12 @@ import io.fabric8.kubernetes.model.annotation.Version;
 
 /**
  * ProjectSource Custom Resource Definition.
- * 
- * This CRD allows creating a PVC from an existing PV with a specific path
- * to mount project sources for live development in Kubernetes.
- * 
- * Example usage:
+ *
+ * <p>This CRD allows creating a PVC from an existing PV with a specific path to mount project
+ * sources for live development in Kubernetes.
+ *
+ * <p>Example usage:
+ *
  * <pre>
  * apiVersion: shadok.com/v1
  * kind: ProjectSource
@@ -30,14 +31,10 @@ import io.fabric8.kubernetes.model.annotation.Version;
 @Version("v1")
 @Kind("ProjectSource")
 public class ProjectSource extends CustomResource<ProjectSourceSpec, ProjectSourceStatus>
-        implements Namespaced {
+    implements Namespaced {
 
-    /**
-     * Default constructor required for deserialization.
-     */
-    public ProjectSource() {
-        super();
-    }
-
-
+  /** Default constructor required for deserialization. */
+  public ProjectSource() {
+    super();
+  }
 }

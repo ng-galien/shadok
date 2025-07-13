@@ -5,15 +5,15 @@ import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.model.annotation.Group;
 import io.fabric8.kubernetes.model.annotation.Kind;
 import io.fabric8.kubernetes.model.annotation.Version;
-import org.shadok.operator.model.ApplicationType;
 
 /**
  * Application Custom Resource Definition.
- * 
- * This is a parent CRD that groups ProjectSource and DependencyCache CRDs
- * and adds an application type (Spring, Quarkus, Node, Python, etc.).
- * 
- * Example usage:
+ *
+ * <p>This is a parent CRD that groups ProjectSource and DependencyCache CRDs and adds an
+ * application type (Spring, Quarkus, Node, Python, etc.).
+ *
+ * <p>Example usage:
+ *
  * <pre>
  * apiVersion: shadok.org/v1
  * kind: Application
@@ -30,14 +30,10 @@ import org.shadok.operator.model.ApplicationType;
 @Version("v1")
 @Kind("Application")
 public class Application extends CustomResource<ApplicationSpec, ApplicationStatus>
-        implements Namespaced {
+    implements Namespaced {
 
-    /**
-     * Default constructor required for deserialization.
-     */
-    public Application() {
-        super();
-    }
-
-
+  /** Default constructor required for deserialization. */
+  public Application() {
+    super();
+  }
 }
