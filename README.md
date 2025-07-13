@@ -104,3 +104,43 @@ Application FastAPI avec documentation automatique OpenAPI.
 - **.NET** - Application ASP.NET Core
 
 ---
+
+## 🐳 Environnement de développement Kubernetes
+
+Shadok inclut un environnement de développement Kubernetes complet basé sur **kind** (Kubernetes in Docker) avec registry locale intégrée.
+
+### 🚀 Démarrage rapide
+
+```bash
+# Démarrer l'environnement kind complet
+./k8s/start-kind.sh
+
+# Vérifier le statut
+./k8s/status-kind.sh
+
+# Arrêter l'environnement
+./k8s/stop-kind.sh
+```
+
+### ✨ Fonctionnalités
+
+- **Cluster multi-node** : 1 control-plane + 2 workers
+- **Registry locale** sur `localhost:5001`
+- **Mirror GitHub** configuré pour `ghcr.io`
+- **Ingress Controller** NGINX préinstallé
+- **Scripts idempotents** pour un environnement reproductible
+
+### 📦 Utilisation avec les pods
+
+```bash
+# Construire et pousser une image locale
+docker build -t localhost:5001/shadok/quarkus-hello:latest pods/quarkus-hello/
+docker push localhost:5001/shadok/quarkus-hello:latest
+
+# Déployer dans le cluster kind
+kubectl apply -f pods/quarkus-hello/k8s/
+```
+
+Pour plus de détails, voir [k8s/README.md](k8s/README.md).
+
+---
