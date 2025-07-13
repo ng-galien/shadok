@@ -142,12 +142,6 @@ nodes:
     protocol: TCP
   extraMounts:
 ${pods_mounts}
-- role: worker
-  extraMounts:
-${pods_mounts}
-- role: worker
-  extraMounts:
-${pods_mounts}
 containerdConfigPatches:
 - |-
   [plugins."io.containerd.grpc.v1.cri".registry]
