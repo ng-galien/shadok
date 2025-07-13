@@ -28,6 +28,9 @@ jackson = "2.18.2"
 junit = "5.11.3"
 rest-assured = "5.5.0"
 
+# TOML validation
+toml-checker = "0.1.0"
+
 [libraries]
 # Quarkus BOMs
 quarkus-bom = { module = "io.quarkus.platform:quarkus-bom", version.ref = "quarkus" }
@@ -61,3 +64,4 @@ testing = ["quarkus-junit5", "rest-assured"]
 # Plugin definitions
 quarkus = { id = "io.quarkus", version.ref = "quarkus" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+toml-checker = { id = "net.ltgt.gradle.toml-checker", version.ref = "toml-checker" }

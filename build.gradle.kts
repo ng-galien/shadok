@@ -51,9 +51,14 @@ subprojects {
     // Spotless configuration
     configure<com.diffplug.gradle.spotless.SpotlessExtension> {
         java {
-            googleJavaFormat("1.19.2")
+            googleJavaFormat(libs.versions.google.java.format.get())
             removeUnusedImports()
             target("src/**/*.java")
+        }
+        
+        format("toml") {
+            target("**/*.toml")
+            prettier()
         }
     }
     
