@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: node-hello
+  namespace: default
+  labels:
+    app.kubernetes.io/name: node-hello
+    app.kubernetes.io/version: 1.0.0
+    app.kubernetes.io/part-of: shadok-pods
+    app.kubernetes.io/managed-by: shadok
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  rules:
+  - host: node-hello.127.0.0.1.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: node-hello
+            port:
+              number: 80

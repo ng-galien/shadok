@@ -472,6 +472,68 @@ tasks.register("lintNode", Exec::class) {
     }
 }
 
+// Task to apply Node.js Kubernetes manifests
+tasks.register("applyNodeK8s", Exec::class) {
+    group = "node-pods"
+    description = "Apply Kubernetes manifests for node-hello pod"
+    
+    workingDir = file("$nodePodDir/k8s")
+    commandLine = listOf("kubectl", "apply", "-k", ".")
+    
+    doFirst {
+        println("☸️ Applying Node.js Kubernetes manifests...")
+        println("🌐 Ingress will be available at: http://node-hello.127.0.0.1.nip.io")
+    }
+    
+    doLast {
+        println("✅ Node.js pod deployed to Kubernetes")
+        println("💡 Check status with: kubectl get pods,svc,ingress -l app.kubernetes.io/name=node-hello")
+    }
+}
+
+// Task to delete Node.js Kubernetes resources
+tasks.register("deleteNodeK8s", Exec::class) {
+    group = "node-pods"
+    description = "Delete Kubernetes resources for node-hello pod"
+    
+    workingDir = file("$nodePodDir/k8s")
+    commandLine = listOf("kubectl", "delete", "-k", ".")
+    
+    doFirst {
+        println("🗑️ Deleting Node.js Kubernetes resources...")
+    }
+    
+    doLast {
+        println("✅ Node.js Kubernetes resources deleted")
+    }
+}
+
+// Task to show Node.js Kubernetes status
+tasks.register("statusNodeK8s", Exec::class) {
+    group = "node-pods"
+    description = "Show Kubernetes status for node-hello pod"
+    
+    commandLine = listOf("kubectl", "get", "pods,svc,ingress", "-l", "app.kubernetes.io/name=node-hello")
+    
+    doFirst {
+        println("☸️ Node.js Kubernetes Status:")
+        println("=".repeat(40))
+    }
+}
+
+// Task to get Node.js pod logs
+tasks.register("logsNodeK8s", Exec::class) {
+    group = "node-pods"
+    description = "Show logs for node-hello pod"
+    
+    commandLine = listOf("kubectl", "logs", "-l", "app.kubernetes.io/name=node-hello", "--tail=50")
+    
+    doFirst {
+        println("📋 Node.js Pod Logs (last 50 lines):")
+        println("=".repeat(40))
+    }
+}
+
 // Task to show Node.js pod status
 tasks.register("nodeStatus") {
     group = "node-pods"
@@ -493,6 +555,10 @@ tasks.register("nodeStatus") {
         println("   ./gradlew runNodeDev       # Dev mode with live reload")
         println("   ./gradlew runNode          # Production mode")
         println("   ./gradlew buildNodeImage   # Build Docker image")
+        println("   ./gradlew applyNodeK8s     # Deploy to Kubernetes")
+        println("   ./gradlew deleteNodeK8s    # Delete from Kubernetes")
+        println("   ./gradlew statusNodeK8s    # Show Kubernetes status")
+        println("   ./gradlew logsNodeK8s      # Show pod logs")
         println("🧪 Tests: Run './gradlew runNodeTests' to execute")
         println("🚀 Dev mode: Run './gradlew runNodeDev' to start")
         println("🐳 Docker: Run './gradlew runNodeDocker' to start with Docker")
@@ -760,12 +826,18 @@ tasks.register("podsHelp") {
         println("      ./gradlew runNodeDocker         # Run with Docker")
         println("      ./gradlew nodeStatus            # Show detailed status")
         println("      ./gradlew lintNode              # Lint code")
+        println("      ./gradlew applyNodeK8s          # Deploy to Kubernetes")
+        println("      ./gradlew statusNodeK8s         # Show K8s status")
+        println("      ./gradlew logsNodeK8s           # Show pod logs")
+        println("      ./gradlew deleteNodeK8s         # Delete from K8s")
         println("   🌐 Endpoints (http://localhost:3000):")
         println("      GET /                           # Service info")
         println("      GET /hello                      # Text response")
         println("      GET /hello/json                 # JSON response")
         println("      GET /health                     # Health check")
         println("      GET /ready                      # Readiness check")
+        println("   ☸️ Kubernetes (http://node-hello.127.0.0.1.nip.io):")
+        println("      All endpoints available via ingress")
         println("")
         
         println("�🛠 DEVELOPMENT WORKFLOW")

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-hello
+  namespace: default
+  labels:
+    app.kubernetes.io/name: node-hello
+    app.kubernetes.io/version: 1.0.0
+    app.kubernetes.io/part-of: shadok-pods
+    app.kubernetes.io/managed-by: shadok
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: node-hello

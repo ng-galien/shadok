@@ -1,6 +1,6 @@
 # Shadok
 
-**Shadok** (Simple Hypervisor for Artifact Delivery On Kubernetes) est une plateforme conçue pour déployer et exécuter des applications en **live reload** directement depuis leur code source, sans passer par un pipeline CI/CD classique. 
+**Shadok** (Simple Hypervisor for Artifact Delivery On Kubernetes) est une plateforme conçue pour déployer et exécuter des applications en **live reload** directement depuis leur code source, sans passer par un pipeline CI/CD classique.
 
 Il permet aux développeurs de travailler de manière interactive dans un cluster Kubernetes en synchronisant les sources, en gérant les dépendances partagées, et en assurant le redémarrage conditionnel des pods si nécessaire.
 
