@@ -18,39 +18,82 @@ Il permet aux développeurs de travailler de manière interactive dans un cluste
 
 ## 🧪 Applications de démonstration
 
-Le répertoire `pods/` contient des applications de démonstration pour différents langages et frameworks :
+Le projet inclut des applications d'exemple pour tester Shadok avec différents langages :
 
-### Quarkus Hello (`pods/quarkus-hello/`)
+### 🎯 Commandes rapides
 
-Application Quarkus simple avec :
-- **REST API** avec endpoints `/hello` et `/hello/json`
-- **Intégration Kubernetes native** avec l'extension quarkus-kubernetes
-- **Container Image** automatique avec Jib
-- **Live Reload** activé pour le développement
-- **Health Checks** configurés (`/q/health/*`)
-
-**Démarrage rapide** :
 ```bash
-cd pods/quarkus-hello
-./start.sh dev
+# Voir le statut de tous les pods
+./gradlew podsStatus
+
+# Tester tous les pods
+./gradlew testAllPods
+
+# Construire tous les pods
+./gradlew buildAllPods
+
+# Configuration complète
+./gradlew setupAllPods
 ```
 
-### Python Hello (`pods/python-hello/`)
+### ⚡ Pod Quarkus (Java)
 
-Application Python FastAPI simple avec :
-
-- **REST API** avec FastAPI et endpoints `/hello` et `/hello/json`
-- **Documentation automatique** Swagger/OpenAPI accessible sur `/docs`
-- **Container Image** optimisé avec Alpine Linux
-- **Live Reload** activé pour le développement
-- **Health Checks** configurés (`/health`)
-- **Tests** avec pytest
-
-**Démarrage rapide** :
+Application Quarkus 3.8.1 avec intégration Kubernetes native.
 
 ```bash
-cd pods/python-hello
-./start.sh dev
+# Construire le pod Quarkus
+./gradlew buildQuarkusPod
+
+# Lancer en mode dev (live reload)
+./gradlew runQuarkusDev
+
+# Générer les manifestes Kubernetes
+./gradlew generateQuarkusK8s
+
+# URL locale: http://localhost:8080
+```
+
+**Endpoints disponibles :**
+
+- `GET /hello` - Message de bienvenue en texte
+- `GET /hello/json` - Message de bienvenue en JSON
+- `GET /q/health` - Health check Quarkus
+
+### 🐍 Pod Python (FastAPI)
+
+Application FastAPI avec documentation automatique OpenAPI.
+
+```bash
+# Configurer l'environnement Python
+./gradlew setupPython
+
+# Lancer en mode dev (live reload)
+./gradlew runPythonDev
+
+# Construire l'image Docker
+./gradlew buildPythonImage
+
+# URL locale: http://localhost:8000
+```
+
+**Endpoints disponibles :**
+
+- `GET /hello` - Message de bienvenue en texte
+- `GET /hello/json` - Message de bienvenue en JSON
+- `GET /health` - Health check
+- `GET /docs` - Documentation interactive Swagger
+
+### 📋 Tâches disponibles
+
+```bash
+# Python
+./gradlew tasks --group python-pods
+
+# Quarkus  
+./gradlew tasks --group quarkus-pods
+
+# Toutes les tâches pods
+./gradlew tasks --group pods
 ```
 
 ### Applications futures
