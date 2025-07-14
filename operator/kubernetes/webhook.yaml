@@ -1,39 +1,19 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: shadok-deployment-webhook
+  name: shadok-pod-mutator
 webhooks:
-  - name: deployment-webhook.shadok.org
+  - name: pod-mutator.shadok.org
     clientConfig:
       service:
-        name: shadok-webhook
-        namespace: default
-        path: "/mutate"
-      caBundle: ${CA_BUNDLE}
+        name: operator
+        namespace: shadok
+        path: "/mutate-pods"
     rules:
-      - operations: ["CREATE", "UPDATE"]
-        apiGroups: ["apps"]
+      - operations: ["CREATE"]
+        apiGroups: [""]
         apiVersions: ["v1"]
-        resources: ["deployments"]
-    admissionReviewVersions: ["v1"]
+        resources: ["pods"]
+    admissionReviewVersions: ["v1", "v1beta1"]
     sideEffects: None
-    timeoutSeconds: 5
     failurePolicy: Ignore
-    namespaceSelector:
-      matchExpressions:
-        - key: kubernetes.io/metadata.name
-          operator: NotIn
-          values: ["kube-system", "kube-public"]
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: shadok-webhook
-  namespace: default
-spec:
-  selector:
-    app: shadok
-  ports:
-    - port: 443
-      targetPort: 8443
-  type: ClusterIP

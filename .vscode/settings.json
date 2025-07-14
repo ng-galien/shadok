@@ -4,5 +4,8 @@
         "quarkus",
         "shadok"
     ],
-    "FSharp.suggestGitignore": false
+    "FSharp.suggestGitignore": false,
+    "yaml.schemas": {
+        "kubernetes://schema/admissionregistration.k8s.io/v1@mutatingwebhookconfiguration": "file:///Users/alexandreboyer/dev/kub/shadok/operator/kubernetes/webhook.yaml"
+    }
 }
