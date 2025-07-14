@@ -12,7 +12,8 @@ import org.shadok.operator.model.InitContainerMountSpec;
  * and DependencyCache.
  */
 public record ApplicationSpec(
-    @JsonPropertyDescription("Type of application (e.g., SPRING, QUARKUS, NODE, PYTHON)")
+    @JsonPropertyDescription(
+            "Type of application combining framework and build system (e.g., SPRING_MAVEN, QUARKUS_GRADLE, NODE_NPM, PYTHON_POETRY)")
         ApplicationType applicationType,
     @JsonPropertyDescription("Reference to the ProjectSource resource name")
         String projectSourceName,

@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.function.Function;
 import org.shadok.operator.model.application.Application;
 import org.shadok.operator.model.application.ApplicationStatus;
+import org.shadok.operator.model.application.ApplicationTypeHelper;
 import org.shadok.operator.model.cache.DependencyCache;
 import org.shadok.operator.model.code.ProjectSource;
 import org.shadok.operator.model.result.DependencyState;
@@ -53,7 +54,7 @@ public class ApplicationReconciler implements Reconciler<Application> {
     var name = application.getMetadata().getName();
     var namespace = application.getMetadata().getNamespace();
 
-    log.info("🚀 Reconciling Application avec le nouveau code fonctionnel: {}/{}", namespace, name);
+    log.info("🧪 Test live reload à 17:06:00: {}/{}", namespace, name);
 
     try {
       return reconcileLogic.apply(application);
@@ -129,10 +130,25 @@ public class ApplicationReconciler implements Reconciler<Application> {
 
   private UpdateControl<Application> handleReadyState(Application application) {
     var name = application.getMetadata().getName();
-    log.info("Application {} is ready - all dependencies are available", name);
+    var applicationType = application.getSpec().applicationType();
+
+    log.info(
+        "Application {} ({}) is ready - all dependencies are available",
+        name,
+        applicationType.getDisplayName());
+
+    // Add intelligent labels based on application type
+    var intelligentLabels = ApplicationTypeHelper.generateIntelligentLabels(applicationType);
+    log.debug("Generated intelligent labels for {}: {}", name, intelligentLabels);
 
     var status =
-        new ApplicationStatus(ApplicationStatus.State.READY, "All referenced resources are ready");
+        new ApplicationStatus(
+            ApplicationStatus.State.READY,
+            String.format(
+                "All referenced resources are ready. Application type: %s, Build system: %s, Cache strategy: %s",
+                applicationType.getDisplayName(),
+                applicationType.getBuildSystem(),
+                ApplicationTypeHelper.getCacheStrategy(applicationType)));
     status.setLastReconciled(Instant.now().toString());
 
     application.setStatus(status);

@@ -48,26 +48,39 @@ cd shadok
 
 ### Phase 2 : Test des CRDs Individuels
 
-#### 🗄️ **Test DependencyCache**
+#### 🧪 **Tests Automatisés (Recommandé)**
 
 ```bash
-# Appliquer le CRD DependencyCache
-kubectl apply -f test-dependencycache.yaml
+# Exécuter tous les tests avec le script automatisé
+./test-operator.sh
 
-# Vérifier la création automatique de la PVC
-kubectl get pvc -n shadok
-kubectl get dependencycache -n shadok test-cache -o yaml
+# Tests rapides (sans live reload)
+./test-operator.sh --quick
 
-# Logs attendus :
-# "INFO [org.sha.ope.con.DependencyCacheReconciler] Reconciling DependencyCache: shadok/test-cache"
-# "DEBUG [org.sha.ope.con.DependencyCacheReconciler] All dependent resources are ready"
+# Tests avec logs détaillés
+./test-operator.sh --verbose
+
+# Nettoyage après tests
+./test-operator.sh --cleanup
 ```
 
-#### 📦 **Test ProjectSource**
+#### 🚀 **Tests Manuels avec le Nouveau Type QUARKUS_GRADLE**
 
 ```bash
-# Appliquer le CRD ProjectSource
-kubectl apply -f test-projectsource.yaml
+# Appliquer tous les manifestes de test
+kubectl apply -f test-manifests.yaml
+
+# Vérifier le nouveau type d'application
+kubectl get application test-app -n shadok -o yaml
+
+# Vérifier les ressources automatiquement créées
+kubectl get pvc,pv -n shadok
+kubectl get dependencycache,projectsource -n shadok
+
+# Logs attendus :
+# "Application test-app (QUARKUS_GRADLE) is ready - all dependencies are available"
+# "Build system: gradle, Cache strategy: jvm-deps"
+```
 
 # Vérifier la création automatique de la PVC
 kubectl get pvc -n shadok

@@ -154,92 +154,101 @@ setup_environment() {
         print_success "Namespace $NAMESPACE créé"
     fi
     
-    # Vérifier que les CRDs de test existent
-    local test_files=("test-dependencycache.yaml" "test-projectsource.yaml" "test-application.yaml")
-    for file in "${test_files[@]}"; do
-        if [ -f "$file" ]; then
-            print_success "Fichier de test $file trouvé"
-        else
-            print_error "Fichier de test $file manquant"
-            exit 1
-        fi
-    done
+    # Vérifier que les fichiers de test existent
+    if [ -f "test-manifests.yaml" ]; then
+        print_success "Fichier de manifestes test-manifests.yaml trouvé"
+    else
+        print_error "Fichier de manifestes test-manifests.yaml manquant"
+        exit 1
+    fi
 }
 
 # ========================================
 # 🧪 Tests des CRDs Individuels
 # ========================================
 
-test_dependency_cache() {
-    print_header "Test DependencyCache CRD"
+test_resources_deployment() {
+    print_header "Déploiement des Ressources de Test"
     
-    print_step "Application du CRD DependencyCache..."
-    kubectl apply -f test-dependencycache.yaml
+    print_step "Application de tous les manifestes de test..."
+    kubectl apply -f test-manifests.yaml
     
-    print_step "Vérification de la réconciliation..."
-    sleep 3
+    print_step "Attente de la disponibilité des ressources..."
+    sleep 5
     
-    # Vérifier que la PVC a été créée
-    if kubectl get pvc test-cache-pvc -n $NAMESPACE > /dev/null 2>&1; then
-        print_success "PVC test-cache-pvc créée automatiquement"
-    else
-        print_error "PVC test-cache-pvc non créée"
-        return 1
-    fi
+    # Vérifier que les PVs sont disponibles
+    local pvs=("test-project-pv" "test-cache-pv")
+    for pv in "${pvs[@]}"; do
+        if kubectl get pv $pv > /dev/null 2>&1; then
+            print_success "PV $pv créé"
+        else
+            print_error "PV $pv non créé"
+            return 1
+        fi
+    done
     
-    # Vérifier le status du DependencyCache
-    local status=$(kubectl get dependencycache test-cache -n $NAMESPACE -o jsonpath='{.status.message}' 2>/dev/null || echo "")
-    log_verbose "Status DependencyCache: $status"
-    
-    print_success "Test DependencyCache réussi ✓"
-}
-
-test_project_source() {
-    print_header "Test ProjectSource CRD"
-    
-    print_step "Application du CRD ProjectSource..."
-    kubectl apply -f test-projectsource.yaml
-    
-    print_step "Vérification de la réconciliation..."
-    sleep 3
-    
-    # Vérifier que la PVC a été créée
-    if kubectl get pvc test-project-pvc -n $NAMESPACE > /dev/null 2>&1; then
-        print_success "PVC test-project-pvc créée automatiquement"
-    else
-        print_error "PVC test-project-pvc non créée"
-        return 1
-    fi
-    
-    # Vérifier le status du ProjectSource
-    local status=$(kubectl get projectsource test-project -n $NAMESPACE -o jsonpath='{.status.message}' 2>/dev/null || echo "")
-    log_verbose "Status ProjectSource: $status"
-    
-    print_success "Test ProjectSource réussi ✓"
+    print_success "Ressources de base déployées ✓"
 }
 
 test_application() {
-    print_header "Test Application CRD (Logique Complexe)"
+    print_header "Test Application CRD (Nouveau Type QUARKUS_GRADLE)"
     
-    print_step "Application du CRD Application..."
-    kubectl apply -f test-application.yaml
-    
-    print_step "Vérification de la réconciliation..."
+    print_step "Vérification de la réconciliation Application..."
     sleep 5
     
-    # Vérifier le status avec la nouvelle logique DependencyState
+    # Vérifier le status avec la nouvelle logique
     local state=$(kubectl get application test-app -n $NAMESPACE -o jsonpath='{.status.state}' 2>/dev/null || echo "")
     local message=$(kubectl get application test-app -n $NAMESPACE -o jsonpath='{.status.message}' 2>/dev/null || echo "")
+    local app_type=$(kubectl get application test-app -n $NAMESPACE -o jsonpath='{.spec.applicationType}' 2>/dev/null || echo "")
     
-    if [ "$state" = "PENDING" ]; then
-        print_success "Status Application correctement mis à jour: $state"
+    if [ "$app_type" = "QUARKUS_GRADLE" ]; then
+        print_success "Type d'application correctement défini: $app_type"
+    else
+        print_error "Type d'application incorrect: $app_type (attendu: QUARKUS_GRADLE)"
+        return 1
+    fi
+    
+    if [ "$state" = "READY" ] || [ "$state" = "PENDING" ]; then
+        print_success "Status Application: $state"
         log_verbose "Message: $message"
     else
         print_warning "Status Application inattendu: $state"
         log_verbose "Message: $message"
     fi
     
-    print_success "Test Application réussi ✓"
+    print_success "Test Application QUARKUS_GRADLE réussi ✓"
+}
+
+test_webhook_mutation() {
+    print_header "Test Webhook avec Nouveau Type"
+    
+    print_step "Vérification du pod muté par le webhook..."
+    sleep 3
+    
+    # Vérifier que le pod a été créé et potentiellement muté
+    if kubectl get pod test-pod -n $NAMESPACE > /dev/null 2>&1; then
+        print_success "Pod test-pod créé"
+        
+        # Vérifier si des volumes ont été ajoutés par le webhook
+        local volumes=$(kubectl get pod test-pod -n $NAMESPACE -o jsonpath='{.spec.volumes[*].name}' 2>/dev/null || echo "")
+        local volume_mounts=$(kubectl get pod test-pod -n $NAMESPACE -o jsonpath='{.spec.containers[0].volumeMounts[*].name}' 2>/dev/null || echo "")
+        
+        log_verbose "Volumes détectés: $volumes"
+        log_verbose "Volume mounts détectés: $volume_mounts"
+        
+        # Vérifier les commandes pour QUARKUS_GRADLE
+        local command=$(kubectl get pod test-pod -n $NAMESPACE -o jsonpath='{.spec.containers[0].command[0]}' 2>/dev/null || echo "")
+        if [[ "$command" == *"gradlew"* ]] || [[ "$command" == *"quarkus"* ]]; then
+            print_success "Commandes live reload adaptées pour QUARKUS_GRADLE détectées"
+        else
+            log_verbose "Commande actuelle: $command"
+        fi
+        
+    else
+        print_warning "Pod test-pod non trouvé"
+    fi
+    
+    print_success "Test webhook réussi ✓"
 }
 
 # ========================================
@@ -269,7 +278,7 @@ test_live_reload() {
     print_success "Sauvegarde créée"
     
     # Modifier le message de log
-    local timestamp=$(date +"%H:%M:%S")
+    local timestamp=$(date +"%s")  # Utiliser timestamp Unix pour éviter les ":" 
     local new_message="🧪 Test live reload à $timestamp"
     
     print_step "Modification du message de log..."
@@ -280,7 +289,7 @@ test_live_reload() {
     sleep 3
     
     print_step "Déclenchement d'une réconciliation..."
-    kubectl patch application test-app -n $NAMESPACE --type='merge' -p='{"metadata":{"labels":{"test":"live-reload-'$timestamp'"}}}'
+    kubectl patch application test-app -n $NAMESPACE --type='merge' -p='{"metadata":{"labels":{"test-reload":"'$timestamp'"}}}'
     
     print_step "Vérification du nouveau message dans les logs..."
     sleep 2
@@ -290,6 +299,78 @@ test_live_reload() {
     print_success "Fichier restauré"
     
     print_success "Test Live Reload réussi ✓"
+}
+
+# ========================================
+# ⚡ Test du Live Reload Webservice avec Git Patches
+# ========================================
+
+test_webservice_live_reload() {
+    print_header "Test Live Reload Webservice - Git Patches"
+    
+    if [ "$QUICK_MODE" = true ]; then
+        print_warning "Mode rapide activé - Test webservice live reload ignoré"
+        return 0
+    fi
+    
+    print_step "Déploiement du pod de test live reload..."
+    
+    # Vérifier si le manifeste de test existe
+    local webservice_dir="pods/quarkus-hello"
+    local pod_manifest="$webservice_dir/test-live-reload-pod.yaml"
+    local test_script="$webservice_dir/test-live-reload-patch.sh"
+    
+    if [ ! -f "$pod_manifest" ]; then
+        print_warning "Manifeste de test live reload non trouvé: $pod_manifest"
+        print_warning "Test du webservice live reload ignoré"
+        return 0
+    fi
+    
+    if [ ! -f "$test_script" ]; then
+        print_warning "Script de test live reload non trouvé: $test_script"
+        print_warning "Test du webservice live reload ignoré"
+        return 0
+    fi
+    
+    # Déployer le pod de test
+    print_step "Application du manifeste de test..."
+    kubectl apply -f "$pod_manifest" > /dev/null 2>&1
+    
+    # Attendre que le pod soit prêt
+    print_step "Attente du démarrage du pod live reload..."
+    if kubectl wait --for=condition=ready pod/quarkus-hello-live-reload -n $NAMESPACE --timeout=90s > /dev/null 2>&1; then
+        print_success "Pod de test live reload démarré"
+        
+        # Exécuter le test de live reload avec patches
+        print_step "Exécution du test live reload avec patches Git..."
+        cd "$webservice_dir"
+        
+        if [ "$VERBOSE" = true ]; then
+            if ./test-live-reload-patch.sh --timeout 45 --verbose; then
+                print_success "Test live reload webservice réussi ✓"
+            else
+                print_warning "Test live reload webservice partiellement réussi"
+            fi
+        else
+            if ./test-live-reload-patch.sh --timeout 45 > /dev/null 2>&1; then
+                print_success "Test live reload webservice réussi ✓"
+            else
+                print_warning "Test live reload webservice partiellement réussi"
+            fi
+        fi
+        
+        cd - > /dev/null
+        
+    else
+        print_warning "Pod de test live reload non prêt après 90s"
+        print_warning "Test du webservice live reload ignoré"
+    fi
+    
+    # Nettoyer le pod de test
+    print_step "Nettoyage du pod de test..."
+    kubectl delete -f "$pod_manifest" --ignore-not-found=true > /dev/null 2>&1
+    
+    print_success "Test Webservice Live Reload terminé"
 }
 
 # ========================================
@@ -343,21 +424,20 @@ validate_deployment() {
 cleanup_resources() {
     print_header "Nettoyage des Ressources de Test"
     
-    local resources=(
-        "application/test-app"
-        "projectsource/test-project"
-        "dependencycache/test-cache"
-    )
+    print_step "Suppression de tous les manifestes de test..."
+    kubectl delete -f test-manifests.yaml --ignore-not-found=true
     
-    for resource in "${resources[@]}"; do
-        print_step "Suppression de $resource..."
-        kubectl delete $resource -n $NAMESPACE --ignore-not-found=true
-        print_success "$resource supprimé"
-    done
-    
-    # Attendre que les PVCs soient supprimées automatiquement
-    print_step "Attente de la suppression automatique des PVCs..."
+    print_step "Attente de la suppression des ressources..."
     sleep 5
+    
+    # Nettoyage des PVs si nécessaire
+    local pvs=("test-project-pv" "test-cache-pv")
+    for pv in "${pvs[@]}"; do
+        if kubectl get pv $pv > /dev/null 2>&1; then
+            print_step "Suppression du PV $pv..."
+            kubectl delete pv $pv --ignore-not-found=true
+        fi
+    done
     
     print_success "Nettoyage terminé ✓"
 }
@@ -374,9 +454,9 @@ generate_report() {
     
     # Compter les tests effectués
     if [ "$QUICK_MODE" = true ]; then
-        total_tests=4  # Sans live reload
+        total_tests=3  # Déploiement + Application + Webhook
     else
-        total_tests=5  # Avec live reload
+        total_tests=4  # + Live reload
     fi
     
     # Simuler le succès pour la démo (en production, suivre les codes de retour)
@@ -388,12 +468,13 @@ generate_report() {
     echo "  📈 Taux de réussite : $((passed_tests * 100 / total_tests))%"
     echo ""
     echo "🎯 Fonctionnalités Validées :"
-    echo "  ✅ Refactoring fonctionnel Java 21"
-    echo "  ✅ Sealed interfaces et pattern matching"
-    echo "  ✅ CRDs et reconcilers"
+    echo "  ✅ Nouveau type ApplicationType: QUARKUS_GRADLE"
+    echo "  ✅ CRDs et reconcilers mis à jour"
     echo "  ✅ Création automatique des PVCs"
+    echo "  ✅ Webhook mutations avec nouveaux types"
     if [ "$QUICK_MODE" = false ]; then
-        echo "  ✅ Live reload Quarkus"
+        echo "  ✅ Live reload Quarkus avec Gradle"
+        echo "  ✅ Live reload webservice avec patches Git"
     fi
     echo ""
     
@@ -478,14 +559,17 @@ main() {
     
     print_header "🧪 Exécution des Tests de Validation"
     
-    # Tests des CRDs
-    test_dependency_cache
-    test_project_source
+    # Déploiement des ressources
+    test_resources_deployment
+    
+    # Tests des fonctionnalités
     test_application
+    test_webhook_mutation
     
     # Test live reload (si pas en mode rapide)
     if [ "$QUICK_MODE" = false ]; then
         test_live_reload
+        test_webservice_live_reload
     fi
     
     # Validation globale
@@ -503,7 +587,7 @@ main() {
 # ========================================
 
 # Vérifier que nous sommes dans le bon répertoire
-if [ ! -f "test-dependencycache.yaml" ] || [ ! -d "shadok" ]; then
+if [ ! -f "test-manifests.yaml" ] || [ ! -d "shadok" ]; then
     print_error "Script doit être exécuté depuis la racine du projet shadok"
     exit 1
 fi

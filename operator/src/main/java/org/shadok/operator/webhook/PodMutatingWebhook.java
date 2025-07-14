@@ -277,7 +277,7 @@ public class PodMutatingWebhook {
 
   private LiveReloadConfig getLiveReloadConfig(ApplicationType applicationType) {
     return switch (applicationType) {
-      case SPRING ->
+      case SPRING_MAVEN ->
           new LiveReloadConfig(
               List.of("mvn", "spring-boot:run"),
               List.of(
@@ -292,7 +292,22 @@ public class PodMutatingWebhook {
                       .build()),
               List.of(
                   new ContainerPortBuilder().withContainerPort(5005).withName("debug").build()));
-      case QUARKUS ->
+      case SPRING_GRADLE ->
+          new LiveReloadConfig(
+              List.of("./gradlew", "bootRun"),
+              List.of(
+                  new EnvVarBuilder()
+                      .withName("GRADLE_USER_HOME")
+                      .withValue("/cache/.gradle")
+                      .build(),
+                  new EnvVarBuilder()
+                      .withName("JAVA_TOOL_OPTIONS")
+                      .withValue(
+                          "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
+                      .build()),
+              List.of(
+                  new ContainerPortBuilder().withContainerPort(5005).withName("debug").build()));
+      case QUARKUS_MAVEN ->
           new LiveReloadConfig(
               List.of("mvn", "quarkus:dev"),
               List.of(
@@ -307,40 +322,123 @@ public class PodMutatingWebhook {
                       .build()),
               List.of(
                   new ContainerPortBuilder().withContainerPort(5005).withName("debug").build()));
-      case NODE ->
+      case QUARKUS_GRADLE ->
+          new LiveReloadConfig(
+              List.of("./gradlew", "quarkusDev"),
+              List.of(
+                  new EnvVarBuilder()
+                      .withName("GRADLE_USER_HOME")
+                      .withValue("/cache/.gradle")
+                      .build(),
+                  new EnvVarBuilder()
+                      .withName("JAVA_TOOL_OPTIONS")
+                      .withValue(
+                          "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
+                      .build()),
+              List.of(
+                  new ContainerPortBuilder().withContainerPort(5005).withName("debug").build()));
+      case NODE_NPM, REACT_NPM, NEXTJS_NPM, VUE_NPM, ANGULAR_NPM ->
           new LiveReloadConfig(
               List.of("npm", "run", "dev"),
               List.of(new EnvVarBuilder().withName("NODE_ENV").withValue("development").build()),
               List.of(
                   new ContainerPortBuilder().withContainerPort(9229).withName("debug").build()));
-      case PYTHON ->
+      case NODE_YARN, REACT_YARN, NEXTJS_YARN, VUE_YARN, ANGULAR_YARN ->
+          new LiveReloadConfig(
+              List.of("yarn", "dev"),
+              List.of(new EnvVarBuilder().withName("NODE_ENV").withValue("development").build()),
+              List.of(
+                  new ContainerPortBuilder().withContainerPort(9229).withName("debug").build()));
+      case PYTHON_PIP ->
+          new LiveReloadConfig(
+              List.of("python", "-m", "pip", "install", "-e", ".", "&&", "python", "main.py"),
+              List.of(
+                  new EnvVarBuilder().withName("PYTHONPATH").withValue("/workspace").build(),
+                  new EnvVarBuilder().withName("PIP_CACHE_DIR").withValue("/cache/.pip").build()),
+              List.of(
+                  new ContainerPortBuilder().withContainerPort(5678).withName("debug").build()));
+      case PYTHON_POETRY ->
+          new LiveReloadConfig(
+              List.of("poetry", "run", "python", "main.py"),
+              List.of(
+                  new EnvVarBuilder().withName("PYTHONPATH").withValue("/workspace").build(),
+                  new EnvVarBuilder()
+                      .withName("POETRY_CACHE_DIR")
+                      .withValue("/cache/.poetry")
+                      .build()),
+              List.of(
+                  new ContainerPortBuilder().withContainerPort(5678).withName("debug").build()));
+      case DJANGO_PIP ->
           new LiveReloadConfig(
               List.of("python", "manage.py", "runserver", "0.0.0.0:8080"),
               List.of(
                   new EnvVarBuilder().withName("DEBUG").withValue("True").build(),
-                  new EnvVarBuilder().withName("PYTHONPATH").withValue("/workspace").build()),
+                  new EnvVarBuilder().withName("PYTHONPATH").withValue("/workspace").build(),
+                  new EnvVarBuilder().withName("PIP_CACHE_DIR").withValue("/cache/.pip").build()),
               List.of(
                   new ContainerPortBuilder().withContainerPort(5678).withName("debug").build()));
-      case GO ->
+      case DJANGO_POETRY ->
+          new LiveReloadConfig(
+              List.of("poetry", "run", "python", "manage.py", "runserver", "0.0.0.0:8080"),
+              List.of(
+                  new EnvVarBuilder().withName("DEBUG").withValue("True").build(),
+                  new EnvVarBuilder().withName("PYTHONPATH").withValue("/workspace").build(),
+                  new EnvVarBuilder()
+                      .withName("POETRY_CACHE_DIR")
+                      .withValue("/cache/.poetry")
+                      .build()),
+              List.of(
+                  new ContainerPortBuilder().withContainerPort(5678).withName("debug").build()));
+      case FASTAPI_PIP ->
+          new LiveReloadConfig(
+              List.of("uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"),
+              List.of(
+                  new EnvVarBuilder().withName("PYTHONPATH").withValue("/workspace").build(),
+                  new EnvVarBuilder().withName("PIP_CACHE_DIR").withValue("/cache/.pip").build()),
+              List.of(
+                  new ContainerPortBuilder().withContainerPort(5678).withName("debug").build()));
+      case FASTAPI_POETRY ->
+          new LiveReloadConfig(
+              List.of(
+                  "poetry",
+                  "run",
+                  "uvicorn",
+                  "main:app",
+                  "--host",
+                  "0.0.0.0",
+                  "--port",
+                  "8080",
+                  "--reload"),
+              List.of(
+                  new EnvVarBuilder().withName("PYTHONPATH").withValue("/workspace").build(),
+                  new EnvVarBuilder()
+                      .withName("POETRY_CACHE_DIR")
+                      .withValue("/cache/.poetry")
+                      .build()),
+              List.of(
+                  new ContainerPortBuilder().withContainerPort(5678).withName("debug").build()));
+      case GO_MOD ->
           new LiveReloadConfig(
               List.of("go", "run", "main.go"),
               List.of(),
               List.of(
                   new ContainerPortBuilder().withContainerPort(40000).withName("debug").build()));
-      case RUBY ->
+      case RUBY_BUNDLER, RAILS_BUNDLER ->
           new LiveReloadConfig(
               List.of("bundle", "exec", "rails", "server"),
               List.of(),
               List.of(
                   new ContainerPortBuilder().withContainerPort(1234).withName("debug").build()));
-      case PHP ->
+      case PHP_COMPOSER ->
           new LiveReloadConfig(
               List.of("php", "-S", "0.0.0.0:8080"),
               List.of(),
               List.of(
                   new ContainerPortBuilder().withContainerPort(9003).withName("debug").build()));
-      case DOTNET -> new LiveReloadConfig(List.of("dotnet", "watch", "run"), List.of(), List.of());
-      case OTHER -> new LiveReloadConfig(List.of(), List.of(), List.of());
+      case DOTNET_NUGET ->
+          new LiveReloadConfig(List.of("dotnet", "watch", "run"), List.of(), List.of());
+      case JAVA_MAVEN, JAVA_GRADLE, RUST_CARGO, FLUTTER_PUB, CUSTOM ->
+          new LiveReloadConfig(List.of(), List.of(), List.of());
     };
   }
 

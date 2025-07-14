@@ -1,0 +1,68 @@
+# Gradle Version Catalog (TOML)
+# This file centralizes all dependency versions for the Shadok project
+
+[metadata]
+format.version = "1.1"
+
+[versions]
+# Build tools
+gradle = "8.11.1"
+java = "21"
+
+# Frameworks and platforms
+quarkus = "3.23.2"
+quarkus-operator-sdk = "7.2.0"
+
+# Kubernetes and Operator SDK
+fabric8-client = "6.13.4"
+josdk-webhooks = "3.0.0"
+
+# Code quality and formatting
+spotless = "6.25.0"
+google-java-format = "1.19.2"
+
+# Jackson
+jackson = "2.18.2"
+
+# Testing
+junit = "5.11.3"
+rest-assured = "5.5.0"
+
+# TOML validation
+toml-checker = "0.1.0"
+
+[libraries]
+# Quarkus BOMs
+quarkus-bom = { module = "io.quarkus.platform:quarkus-bom", version.ref = "quarkus" }
+quarkus-operator-sdk-bom = { module = "io.quarkiverse.operatorsdk:quarkus-operator-sdk-bom", version.ref = "quarkus-operator-sdk" }
+
+# Quarkus core
+quarkus-arc = { module = "io.quarkus:quarkus-arc" }
+quarkus-rest = { module = "io.quarkus:quarkus-rest" }
+quarkus-rest-jackson = { module = "io.quarkus:quarkus-rest-jackson" }
+quarkus-operator-sdk = { module = "io.quarkiverse.operatorsdk:quarkus-operator-sdk" }
+quarkus-container-image-docker = { module = "io.quarkus:quarkus-container-image-docker" }
+
+# Kubernetes
+kubernetes-client = { module = "io.fabric8:kubernetes-client" }
+kubernetes-webhooks-core = { module = "io.javaoperatorsdk:kubernetes-webhooks-framework-core", version.ref = "josdk-webhooks" }
+
+# Jackson
+jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations" }
+
+# Testing
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+quarkus-junit5 = { module = "io.quarkus:quarkus-junit5" }
+rest-assured = { module = "io.rest-assured:rest-assured" }
+
+[bundles]
+# Bundle groups for common dependency sets
+quarkus-core = ["quarkus-arc", "quarkus-rest", "quarkus-rest-jackson"]
+kubernetes = ["kubernetes-client", "kubernetes-webhooks-core"]
+testing = ["quarkus-junit5", "rest-assured"]
+
+[plugins]
+# Plugin definitions
+quarkus = { id = "io.quarkus", version.ref = "quarkus" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+toml-checker = { id = "net.ltgt.gradle.toml-checker", version.ref = "toml-checker" }

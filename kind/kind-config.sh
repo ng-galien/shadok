@@ -302,8 +302,7 @@ EOF
 create_test_nginx_server() {
     log_info "🌐 Création d'un serveur nginx de test..."
     
-    # Créer le namespace shadok pour les tests
-    kubectl create namespace shadok --dry-run=client -o yaml | kubectl apply -f -
+    # Le namespace shadok existe déjà, pas besoin de le recréer
     
     # Déployer nginx avec une page personnalisée
     kubectl apply -f - <<EOF
@@ -497,12 +496,24 @@ test_configuration() {
     fi
 }
 
+# Créer les namespaces nécessaires
+create_namespaces() {
+    log_info "📁 Création des namespaces nécessaires..."
+    
+    # Créer le namespace shadok pour l'opérateur
+    kubectl create namespace shadok --dry-run=client -o yaml | kubectl apply -f -
+    log_success "✅ Namespace shadok créé"
+}
+
 # Fonction principale
 main() {
     log_info "🚀 === Configuration avancée du cluster kind '${CLUSTER_NAME}' ==="
     echo ""
     
     check_prerequisites
+    create_namespaces
+    echo ""
+    
     add_helm_repos
     echo ""
     

@@ -1,6 +1,6 @@
 rootProject.name = "shadok-parent"
 
-include("shadok")
+include("operator")
 include("pods:quarkus-hello")
 
 pluginManagement {

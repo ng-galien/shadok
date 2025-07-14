@@ -4,7 +4,7 @@ metadata:
   name: test-app
   namespace: shadok
 spec:
-  applicationType: QUARKUS
+  applicationType: QUARKUS_GRADLE
   projectSourceName: "test-project"
   dependencyCacheName: "test-cache"
   initContainerMounts: []

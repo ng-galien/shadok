@@ -1,0 +1,200 @@
+# 🧪 Pod de Test Live Reload - Quarkus Hello
+# ================================================================
+#
+# Ce manifeste déploie un pod Quarkus avec live reload activé
+# pour tester la recompilation automatique en temps réel.
+#
+# Fonctionnalités :
+# - Source code monté depuis le host
+# - Cache Gradle persistant
+# - Live reload activé via webhook Shadok
+# - Commande quarkusDev automatique
+#
+# Usage: kubectl apply -f test-live-reload-pod.yaml
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: quarkus-hello-live-reload
+  namespace: shadok
+  labels:
+    app: quarkus-hello
+    mode: live-reload
+    test: automatic-compilation
+  annotations:
+    # 🎯 Cette annotation déclenche le webhook Shadok
+    # qui configure automatiquement le live reload
+    org.shadok/application: "test-app"
+    description: "Pod de test pour live reload automatique"
+spec:
+  containers:
+  - name: quarkus-hello
+    # Image de base Quarkus avec JDK et Gradle
+    image: quay.io/quarkus/ubi-quarkus-graalvm-builder-image:latest
+    ports:
+    - containerPort: 8080
+      name: http
+      protocol: TCP
+    - containerPort: 5005
+      name: debug
+      protocol: TCP
+    
+    # 📁 Volumes montés pour le live reload
+    volumeMounts:
+    - name: source-code
+      mountPath: /workspace
+      readOnly: false
+    - name: gradle-cache
+      mountPath: /cache/.gradle
+      readOnly: false
+    
+    # 🔧 Variables d'environnement pour Gradle et debug
+    env:
+    - name: GRADLE_USER_HOME
+      value: "/cache/.gradle"
+    - name: JAVA_TOOL_OPTIONS
+      value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+    
+    # 🚀 Commande live reload (sera injectée par le webhook)
+    command: ["./gradlew", "quarkusDev"]
+    workingDir: /workspace
+    
+    # 💾 Ressources allouées
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "2000m"
+    
+    # 🔍 Health checks
+    livenessProbe:
+      httpGet:
+        path: /hello
+        port: 8080
+      initialDelaySeconds: 30
+      periodSeconds: 10
+    
+    readinessProbe:
+      httpGet:
+        path: /hello
+        port: 8080
+      initialDelaySeconds: 15
+      periodSeconds: 5
+  
+  # 📦 Volumes pour le code source et le cache
+  volumes:
+  - name: source-code
+    hostPath:
+      # 📝 Chemin vers le code source de quarkus-hello
+      # Ajustez selon votre environnement
+      path: /Users/alexandreboyer/dev/kub/shadok/pods/quarkus-hello
+      type: Directory
+  
+  - name: gradle-cache
+    hostPath:
+      # 💾 Cache Gradle persistant
+      path: /tmp/gradle-cache-quarkus-hello
+      type: DirectoryOrCreate
+  
+  # ⚙️ Configuration du pod
+  restartPolicy: Never
+  serviceAccountName: default
+  
+  # 🏷️ Sélecteur de nœud (optionnel)
+  # nodeSelector:
+  #   kubernetes.io/os: linux
+
+---
+# 🌐 Service pour exposer le pod (optionnel)
+apiVersion: v1
+kind: Service
+metadata:
+  name: quarkus-hello-live-reload-svc
+  namespace: shadok
+  labels:
+    app: quarkus-hello
+    mode: live-reload
+spec:
+  selector:
+    app: quarkus-hello
+    mode: live-reload
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: debug
+    port: 5005
+    targetPort: 5005
+    protocol: TCP
+  type: ClusterIP
+
+---
+# 📋 ConfigMap avec instructions de test
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: live-reload-test-instructions
+  namespace: shadok
+  labels:
+    app: quarkus-hello
+    mode: live-reload
+data:
+  test-instructions.md: |
+    # Test Live Reload - Instructions
+    
+    ## 🚀 Démarrage du Test
+    
+    1. **Déployer ce manifeste :**
+       ```bash
+       kubectl apply -f test-live-reload-pod.yaml
+       ```
+    
+    2. **Attendre que le pod soit prêt :**
+       ```bash
+       kubectl wait --for=condition=ready pod/quarkus-hello-live-reload -n shadok --timeout=60s
+       ```
+    
+    3. **Exécuter le test automatique :**
+       ```bash
+       cd pods/quarkus-hello
+       ./test-live-reload-patch.sh --verbose
+       ```
+    
+    ## 🔍 Tests Manuels
+    
+    1. **Port-forward vers le pod :**
+       ```bash
+       kubectl port-forward pod/quarkus-hello-live-reload 8080:8080 -n shadok
+       ```
+    
+    2. **Tester l'endpoint initial :**
+       ```bash
+       curl http://localhost:8080/hello/json
+       ```
+    
+    3. **Modifier le code source et observer la recompilation automatique**
+    
+    ## 📊 Validation du Live Reload
+    
+    - ✅ Modification détectée en < 5s
+    - ✅ Recompilation automatique en < 30s
+    - ✅ Nouveau comportement immédiatement accessible
+    - ✅ Logs de recompilation visibles
+    
+    ## 🧹 Nettoyage
+    
+    ```bash
+    kubectl delete -f test-live-reload-pod.yaml
+    ```
+  
+  gradle-config: |
+    # Configuration Gradle pour optimiser le live reload
+    org.gradle.daemon=true
+    org.gradle.parallel=true
+    org.gradle.caching=true
+    org.gradle.configureondemand=true
+    org.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=512m
