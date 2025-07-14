@@ -1,0 +1,56 @@
+apiVersion: shadok.org/v1
+kind: Application
+metadata:
+  name: test-application
+  namespace: test-namespace
+spec:
+  applicationType: QUARKUS
+  projectSourceName: test-project-source
+  dependencyCacheName: test-dependency-cache
+  initContainerMounts:
+    - name: flyway-migration
+      mountPath: /migrations
+      subPath: db/migrations
+---
+apiVersion: shadok.org/v1
+kind: ProjectSource
+metadata:
+  name: test-project-source
+  namespace: test-namespace
+spec:
+  pvcName: test-project-source-pvc
+  gitRepository: https://github.com/example/test-project.git
+  branch: main
+---
+apiVersion: shadok.org/v1
+kind: DependencyCache
+metadata:
+  name: test-dependency-cache
+  namespace: test-namespace
+spec:
+  pvcName: test-dependency-cache-pvc
+  cacheType: MAVEN
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-project-source-pvc
+  namespace: test-namespace
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-dependency-cache-pvc
+  namespace: test-namespace
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi

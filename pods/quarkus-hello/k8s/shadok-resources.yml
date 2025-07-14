@@ -1,0 +1,39 @@
+apiVersion: shadok.org/v1
+kind: Application
+metadata:
+  name: quarkus-hello-app
+  namespace: shadok
+spec:
+  applicationType: QUARKUS
+  projectSourceName: quarkus-hello-source
+  dependencyCacheName: java-cache
+  initContainerMounts:
+    - name: liquibase-migration
+      mountPath: /migrations
+      subPath: db/migrations
+---
+apiVersion: shadok.org/v1
+kind: ProjectSource
+metadata:
+  name: quarkus-hello-source
+  namespace: shadok
+spec:
+  persistentVolumeName: quarkus-hello-source-pv
+  sourcePath: /
+  pvcName: quarkus-hello-source-pvc
+  storageClass: standard
+  storageSize: 2Gi
+  accessMode: ReadOnlyMany
+---
+apiVersion: shadok.org/v1
+kind: DependencyCache
+metadata:
+  name: java-cache
+  namespace: shadok
+spec:
+  persistentVolumeName: java-cache-pv
+  cachePath: /cache
+  pvcName: java-cache-pvc
+  storageClass: standard
+  storageSize: 10Gi
+  accessMode: ReadWriteMany

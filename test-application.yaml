@@ -1,0 +1,10 @@
+apiVersion: shadok.org/v1
+kind: Application
+metadata:
+  name: test-app
+  namespace: shadok
+spec:
+  projectSourceRef: "test-project"
+  dependencyCacheRef: "test-cache"
+  buildCommand: "gradle build"
+  imageTag: "latest"

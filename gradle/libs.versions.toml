@@ -41,6 +41,7 @@ quarkus-arc = { module = "io.quarkus:quarkus-arc" }
 quarkus-rest = { module = "io.quarkus:quarkus-rest" }
 quarkus-rest-jackson = { module = "io.quarkus:quarkus-rest-jackson" }
 quarkus-operator-sdk = { module = "io.quarkiverse.operatorsdk:quarkus-operator-sdk" }
+quarkus-container-image-docker = { module = "io.quarkus:quarkus-container-image-docker" }
 
 # Kubernetes
 kubernetes-client = { module = "io.fabric8:kubernetes-client" }

@@ -12,6 +12,7 @@ dependencies {
     // Quarkus dependencies (using bundles)
     implementation(libs.bundles.quarkus.core)
     implementation(libs.quarkus.operator.sdk)
+    implementation(libs.quarkus.container.image.docker)
     
     // Kubernetes dependencies (using bundles)
     implementation(libs.bundles.kubernetes)

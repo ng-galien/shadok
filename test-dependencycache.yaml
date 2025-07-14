@@ -1,0 +1,8 @@
+apiVersion: shadok.org/v1
+kind: DependencyCache
+metadata:
+  name: test-cache
+  namespace: shadok
+spec:
+  cacheType: "gradle"
+  storageSize: "2Gi"

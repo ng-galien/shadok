@@ -1,0 +1,9 @@
+apiVersion: shadok.org/v1
+kind: ProjectSource
+metadata:
+  name: test-project
+  namespace: shadok
+spec:
+  gitUrl: "https://github.com/example/test-project.git"
+  branch: "main"
+  storageSize: "1Gi"
