@@ -1,5 +1,8 @@
 package org.shadok.operator.controller;
 
+import static io.javaoperatorsdk.operator.api.reconciler.UpdateControl.noUpdate;
+import static io.javaoperatorsdk.operator.api.reconciler.UpdateControl.patchStatus;
+
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
@@ -37,7 +40,7 @@ public class ProjectSourceReconciler implements Reconciler<ProjectSource> {
     log.info("Reconciling ProjectSource: {}/{}", namespace, name);
 
     try {
-      // Vérifier l'état de la PVC dépendante
+      // Check state of dependent PVC
       var pvcResult =
           context.managedWorkflowAndDependentResourceContext().getWorkflowReconcileResult();
 
@@ -55,7 +58,7 @@ public class ProjectSourceReconciler implements Reconciler<ProjectSource> {
   /** Handle successful reconciliation when all dependent resources are ready. */
   private UpdateControl<ProjectSource> handleSuccessfulReconciliation(Object workflowResult) {
     log.debug("All dependent resources are ready");
-    return UpdateControl.noUpdate();
+    return noUpdate();
   }
 
   /** Handle pending reconciliation when dependent resources are not yet ready. */
@@ -63,7 +66,7 @@ public class ProjectSourceReconciler implements Reconciler<ProjectSource> {
     var name = projectSource.getMetadata().getName();
     log.info("ProjectSource {} is not ready yet, rescheduling", name);
 
-    // Mettre à jour le status si nécessaire
+    // Update status if necessary
     if (projectSource.getStatus() == null
         || !ProjectSourceStatus.State.PENDING.equals(projectSource.getStatus().getState())) {
 
@@ -84,6 +87,6 @@ public class ProjectSourceReconciler implements Reconciler<ProjectSource> {
         new ProjectSourceStatus(
             ProjectSourceStatus.State.FAILED, "Reconciliation failed: " + error.getMessage()));
 
-    return UpdateControl.patchStatus(projectSource);
+    return patchStatus(projectSource);
   }
 }

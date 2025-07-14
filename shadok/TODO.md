@@ -4,31 +4,40 @@
 
 ### 🎯 **Évolution Architecturale : De Webhook vers JOSDK Reconcilers**
 
-**Contexte initial :** Session démarrée pour continuer les tests webhook, puis identification d'un gap architectural critique dans la gestion des PVCs.
+**Contexte initial :** Session démarrée pour continuer les tests webhook, puis
+identification d'un gap architectural critique dans la gestion des PVCs.
 
-**Transformation majeure :** Migration d'un pattern webhook-only vers une architecture JOSDK complète avec reconcilers dédiés.
+**Transformation majeure :** Migration d'un pattern webhook-only vers une
+architecture JOSDK complète avec reconcilers dédiés.
 
 ### ✅ **Implémentation JOSDK Reconcilers**
 
 #### 1. **DependencyCacheReconciler**
 
-- **Fichier :** `src/main/java/org/shadok/operator/controller/DependencyCacheReconciler.java`
-- **Pattern :** JOSDK Workflow avec ressource dépendante `DependencyCachePvcDependent`
-- **Fonctionnalité :** Gestion du cycle de vie des PVCs pour cache de dépendances
+- **Fichier :**
+  `src/main/java/org/shadok/operator/controller/DependencyCacheReconciler.java`
+- **Pattern :** JOSDK Workflow avec ressource dépendante
+  `DependencyCachePvcDependent`
+- **Fonctionnalité :** Gestion du cycle de vie des PVCs pour cache de
+  dépendances
 - **États :** PENDING → READY → FAILED avec status updates
 - **Validation :** ✅ Déployé et actif
 
 #### 2. **ProjectSourceReconciler**
 
-- **Fichier :** `src/main/java/org/shadok/operator/controller/ProjectSourceReconciler.java`
-- **Pattern :** JOSDK Workflow avec ressource dépendante `ProjectSourcePvcDependent`
+- **Fichier :**
+  `src/main/java/org/shadok/operator/controller/ProjectSourceReconciler.java`
+- **Pattern :** JOSDK Workflow avec ressource dépendante
+  `ProjectSourcePvcDependent`
 - **Fonctionnalité :** Gestion des PVCs pour sources de projet Git
 - **Validation :** ✅ Déployé et actif
 
 #### 3. **ApplicationReconciler**
 
-- **Fichier :** `src/main/java/org/shadok/operator/controller/ApplicationReconciler.java`
-- **Pattern :** JOSDK Workflow avec dépendances sur ProjectSource et DependencyCache
+- **Fichier :**
+  `src/main/java/org/shadok/operator/controller/ApplicationReconciler.java`
+- **Pattern :** JOSDK Workflow avec dépendances sur ProjectSource et
+  DependencyCache
 - **Fonctionnalité :** Orchestration des builds d'application avec PVCs
 - **Validation :** ✅ Déployé et actif
 
@@ -36,13 +45,16 @@
 
 #### DependencyCachePvcDependent
 
-- **Fichier :** `src/main/java/org/shadok/operator/dependent/DependencyCachePvcDependent.java`
-- **Responsabilité :** Création automatique de PVCs à partir de specs DependencyCache
+- **Fichier :**
+  `src/main/java/org/shadok/operator/dependent/DependencyCachePvcDependent.java`
+- **Responsabilité :** Création automatique de PVCs à partir de specs
+  DependencyCache
 - **Configuration :** ReadyCondition basée sur le status de la PVC
 
 #### ProjectSourcePvcDependent
 
-- **Fichier :** `src/main/java/org/shadok/operator/dependent/ProjectSourcePvcDependent.java`
+- **Fichier :**
+  `src/main/java/org/shadok/operator/dependent/ProjectSourcePvcDependent.java`
 - **Responsabilité :** Création automatique de PVCs pour clones Git
 - **Configuration :** ReadyCondition basée sur le status de la PVC
 
@@ -73,7 +85,8 @@
 
 - **Pod :** `shadok-6946d5d744-rj69q` en Running
 - **Reconcilers :** 3 controllers actifs et enregistrés
-- **Informers :** HEALTHY pour tous les types (Application, ProjectSource, DependencyCache, PVC)
+- **Informers :** HEALTHY pour tous les types (Application, ProjectSource,
+  DependencyCache, PVC)
 - **Namespaces :** Surveillance JOSDK_ALL_NAMESPACES
 
 #### RBAC Complet
@@ -116,7 +129,8 @@
 ### 🔄 **Prochaines Étapes Identifiées**
 
 1. **Tests Reconcilers :** Déploiement de CRDs réels pour validation end-to-end
-2. **Validation PVC :** Vérification création automatique via dependent resources
+2. **Validation PVC :** Vérification création automatique via dependent
+   resources
 3. **Intégration Webhook :** Liaison webhook mutations → reconciler management
 4. **Tests E2E :** Flow complet mutation → réconciliation → PVC → build
 

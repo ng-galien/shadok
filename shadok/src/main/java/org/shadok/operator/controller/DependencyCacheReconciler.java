@@ -1,5 +1,8 @@
 package org.shadok.operator.controller;
 
+import static io.javaoperatorsdk.operator.api.reconciler.UpdateControl.noUpdate;
+import static io.javaoperatorsdk.operator.api.reconciler.UpdateControl.patchStatus;
+
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
@@ -37,7 +40,7 @@ public class DependencyCacheReconciler implements Reconciler<DependencyCache> {
     log.info("Reconciling DependencyCache: {}/{}", namespace, name);
 
     try {
-      // Vérifier l'état de la PVC dépendante
+      // Check state of dependent PVC
       var pvcResult =
           context.managedWorkflowAndDependentResourceContext().getWorkflowReconcileResult();
 
@@ -56,7 +59,7 @@ public class DependencyCacheReconciler implements Reconciler<DependencyCache> {
   /** Handle successful reconciliation when all dependent resources are ready. */
   private UpdateControl<DependencyCache> handleSuccessfulReconciliation(Object workflowResult) {
     log.debug("All dependent resources are ready");
-    return UpdateControl.noUpdate();
+    return noUpdate();
   }
 
   /** Handle pending reconciliation when dependent resources are not yet ready. */
@@ -65,7 +68,7 @@ public class DependencyCacheReconciler implements Reconciler<DependencyCache> {
     var name = dependencyCache.getMetadata().getName();
     log.info("DependencyCache {} is not ready yet, rescheduling", name);
 
-    // Mettre à jour le status si nécessaire
+    // Update status if necessary
     if (dependencyCache.getStatus() == null
         || !DependencyCacheStatus.State.PENDING.equals(dependencyCache.getStatus().getState())) {
 
@@ -86,6 +89,6 @@ public class DependencyCacheReconciler implements Reconciler<DependencyCache> {
         new DependencyCacheStatus(
             DependencyCacheStatus.State.FAILED, "Reconciliation failed: " + error.getMessage()));
 
-    return UpdateControl.patchStatus(dependencyCache);
+    return patchStatus(dependencyCache);
   }
 }

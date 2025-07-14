@@ -1,5 +1,8 @@
 package org.shadok.operator.controller;
 
+import static io.javaoperatorsdk.operator.api.reconciler.UpdateControl.patchStatus;
+import static java.util.Optional.ofNullable;
+
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -8,10 +11,13 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import jakarta.inject.Inject;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.function.Function;
 import org.shadok.operator.model.application.Application;
 import org.shadok.operator.model.application.ApplicationStatus;
 import org.shadok.operator.model.cache.DependencyCache;
 import org.shadok.operator.model.code.ProjectSource;
+import org.shadok.operator.model.result.DependencyState;
+import org.shadok.operator.model.result.ResourceCheckResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,76 +37,93 @@ public class ApplicationReconciler implements Reconciler<Application> {
 
   @Inject KubernetesClient client;
 
+  // Functional style reconciliation logic
+  private final Function<Application, UpdateControl<Application>> reconcileLogic =
+      app ->
+          checkDependencies(app)
+              .map(state -> handleDependencyState(app, state))
+              .orElseGet(
+                  () ->
+                      handleFailedReconciliation(
+                          app, new RuntimeException("Invalid application state")));
+
   @Override
   public UpdateControl<Application> reconcile(
       Application application, Context<Application> context) {
     var name = application.getMetadata().getName();
     var namespace = application.getMetadata().getNamespace();
-    var spec = application.getSpec();
 
     log.info("Reconciling Application: {}/{}", namespace, name);
 
     try {
-      // Vérifier que les ressources référencées existent
-      var projectSourceReady = checkProjectSourceReady(spec.projectSourceName(), namespace);
-      var dependencyCacheReady = checkDependencyCacheReady(spec.dependencyCacheName(), namespace);
-
-      if (projectSourceReady && dependencyCacheReady) {
-        return handleReadyState(application);
-      } else if (!projectSourceReady && !dependencyCacheReady) {
-        return handleMissingBothResources(application);
-      } else if (!projectSourceReady) {
-        return handleMissingProjectSource(application);
-      } else {
-        return handleMissingDependencyCache(application);
-      }
-
+      return reconcileLogic.apply(application);
     } catch (Exception e) {
       log.error("Failed to reconcile Application {}/{}: {}", namespace, name, e.getMessage(), e);
       return handleFailedReconciliation(application, e);
     }
   }
 
-  private boolean checkProjectSourceReady(String projectSourceName, String namespace) {
-    try {
-      var projectSource =
-          client
-              .resources(ProjectSource.class)
-              .inNamespace(namespace)
-              .withName(projectSourceName)
-              .get();
+  /** Check the state of all application dependencies. */
+  private java.util.Optional<DependencyState> checkDependencies(Application app) {
+    var spec = app.getSpec();
+    var namespace = app.getMetadata().getNamespace();
 
-      return projectSource != null
-          && projectSource.getStatus() != null
-          && projectSource.getStatus().getState()
-              == org.shadok.operator.model.code.ProjectSourceStatus.State.READY;
+    var projectResult = checkProjectSource(spec.projectSourceName(), namespace);
+    var cacheResult = checkDependencyCache(spec.dependencyCacheName(), namespace);
+
+    return java.util.Optional.of(DependencyState.from(projectResult, cacheResult));
+  }
+
+  /** Handle the application state based on dependency readiness. */
+  private UpdateControl<Application> handleDependencyState(Application app, DependencyState state) {
+    return switch (state) {
+      case BOTH_READY -> handleReadyState(app);
+      case BOTH_MISSING, PROJECT_MISSING, CACHE_MISSING -> handlePendingState(app, state);
+    };
+  }
+
+  /** Check if a ProjectSource exists and is ready. */
+  private ResourceCheckResult<ProjectSource> checkProjectSource(String name, String namespace) {
+    try {
+      return ofNullable(
+              client.resources(ProjectSource.class).inNamespace(namespace).withName(name).get())
+          .map(
+              projectSource -> {
+                if (projectSource.getStatus() != null
+                    && projectSource.getStatus().getState()
+                        == org.shadok.operator.model.code.ProjectSourceStatus.State.READY) {
+                  return new ResourceCheckResult.Ready<>(projectSource);
+                } else {
+                  return new ResourceCheckResult.NotReady<>(
+                      projectSource, "ProjectSource not ready");
+                }
+              })
+          .orElse(new ResourceCheckResult.NotFound<>(name, namespace));
     } catch (Exception e) {
-      log.warn(
-          "Failed to check ProjectSource {}/{}: {}", namespace, projectSourceName, e.getMessage());
-      return false;
+      log.warn("Failed to check ProjectSource {}/{}: {}", namespace, name, e.getMessage());
+      return new ResourceCheckResult.Failed<>(e.getMessage(), e);
     }
   }
 
-  private boolean checkDependencyCacheReady(String dependencyCacheName, String namespace) {
+  /** Check if a DependencyCache exists and is ready. */
+  private ResourceCheckResult<DependencyCache> checkDependencyCache(String name, String namespace) {
     try {
-      var dependencyCache =
-          client
-              .resources(DependencyCache.class)
-              .inNamespace(namespace)
-              .withName(dependencyCacheName)
-              .get();
-
-      return dependencyCache != null
-          && dependencyCache.getStatus() != null
-          && dependencyCache.getStatus().getState()
-              == org.shadok.operator.model.cache.DependencyCacheStatus.State.READY;
+      return ofNullable(
+              client.resources(DependencyCache.class).inNamespace(namespace).withName(name).get())
+          .map(
+              cache -> {
+                if (cache.getStatus() != null
+                    && cache.getStatus().getState()
+                        == org.shadok.operator.model.cache.DependencyCacheStatus.State.READY) {
+                  return new ResourceCheckResult.Ready<>(cache);
+                } else {
+                  return new ResourceCheckResult.NotReady<>(cache, "DependencyCache not ready");
+                }
+              })
+          .orElse(new ResourceCheckResult.NotFound<>(name, namespace));
     } catch (Exception e) {
-      log.warn(
-          "Failed to check DependencyCache {}/{}: {}",
-          namespace,
-          dependencyCacheName,
-          e.getMessage());
-      return false;
+      log.warn("Failed to check DependencyCache {}/{}: {}", namespace, name, e.getMessage());
+      return new ResourceCheckResult.Failed<>(e.getMessage(), e);
     }
   }
 
@@ -113,32 +136,12 @@ public class ApplicationReconciler implements Reconciler<Application> {
     status.setLastReconciled(Instant.now().toString());
 
     application.setStatus(status);
-    return UpdateControl.patchStatus(application);
+    return patchStatus(application);
   }
 
-  private UpdateControl<Application> handleMissingProjectSource(Application application) {
-    var spec = application.getSpec();
-    var message = "ProjectSource '" + spec.projectSourceName() + "' is not ready";
-
-    return updateStatusAndReschedule(application, ApplicationStatus.State.PENDING, message);
-  }
-
-  private UpdateControl<Application> handleMissingDependencyCache(Application application) {
-    var spec = application.getSpec();
-    var message = "DependencyCache '" + spec.dependencyCacheName() + "' is not ready";
-
-    return updateStatusAndReschedule(application, ApplicationStatus.State.PENDING, message);
-  }
-
-  private UpdateControl<Application> handleMissingBothResources(Application application) {
-    var spec = application.getSpec();
-    var message =
-        "Both ProjectSource '"
-            + spec.projectSourceName()
-            + "' and DependencyCache '"
-            + spec.dependencyCacheName()
-            + "' are not ready";
-
+  private UpdateControl<Application> handlePendingState(
+      Application application, DependencyState state) {
+    var message = state.getDescription(application);
     return updateStatusAndReschedule(application, ApplicationStatus.State.PENDING, message);
   }
 
@@ -150,7 +153,7 @@ public class ApplicationReconciler implements Reconciler<Application> {
     status.setErrorMessage(error.getMessage());
 
     application.setStatus(status);
-    return UpdateControl.patchStatus(application);
+    return patchStatus(application);
   }
 
   private UpdateControl<Application> updateStatusAndReschedule(

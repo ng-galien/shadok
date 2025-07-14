@@ -1,6 +1,23 @@
 # 📏 Conventions de codage – Java 21 + Java Operator SDK
 
-Ce document définit les bonnes pratiques de codage pour un projet basé sur **Java 21** et le **Java Operator SDK**, en tirant parti des dernières fonctionnalités du langage (threads virtuels, record patterns...) et du SDK (workflows, ressources dépendantes).
+Ce document définit les bonnes pratiques de codage pour un projet basé sur
+**Java 21** et le **Java Operator SDK**, en tirant parti des dernières
+fonctionnalités du langage (threads virtuels, record patterns...) et du SDK
+(workflows, ressources dépendantes).
+
+## 🌍 **RÈGLE FONDAMENTALE - LANGUE DU CODE**
+
+> **⚠️ IMPORTANT :** Quelle que soit la langue utilisée pour les instructions ou
+> la communication (français, anglais, etc.), **TOUT le code source, les
+> commentaires, la documentation technique, les noms de
+> variables/méthodes/classes, et les messages de log doivent OBLIGATOIREMENT
+> être rédigés en anglais.**
+>
+> **Portée :** Cette règle s'applique à tous les fichiers sources : `.java`,
+> `.yaml`, `.json`, `.sh`, `.dockerfile`, etc.
+>
+> **Exception :** Seuls les fichiers de documentation utilisateur finale
+> (README, guides, manuels) peuvent être dans la langue locale du projet.
 
 ---
 
@@ -8,7 +25,8 @@ Ce document définit les bonnes pratiques de codage pour un projet basé sur **J
 
 ### 1.1 Organisation modulaire Gradle
 
-Le répertoire `src` doit être contenu dans un module Gradle pour une meilleure organisation et gestion des dépendances :
+Le répertoire `src` doit être contenu dans un module Gradle pour une meilleure
+organisation et gestion des dépendances :
 
 ```text
 module/
@@ -100,12 +118,24 @@ public void createResource(
 - **Javadoc** obligatoire pour les classes publiques et méthodes d'API
 - **Commentaires inline** pour la logique métier complexe
 - **TODO/FIXME** avec ticket de suivi
-- **Langue** : Tous les commentaires et documentation doivent être **rédigés en anglais**
+- **Langue** : Tous les commentaires et documentation doivent être **rédigés en
+  anglais**
+
+**⚠️ RÈGLE IMPORTANTE - LANGUE DU CODE :**
+
+> **Quelle que soit la langue utilisée pour donner les instructions (français,
+> anglais, etc.), tout le code, les commentaires, la documentation technique,
+> les noms de variables, méthodes, classes, et messages de log doivent TOUJOURS
+> être rédigés en anglais.**
+>
+> Cette règle s'applique à tous les fichiers sources : Java, YAML, JSON,
+> scripts, etc. Seuls les fichiers de documentation utilisateur (README, guides,
+> etc.) peuvent être dans la langue locale.
 
 ```java
 /**
  * Reconcile application resources in Kubernetes cluster.
- * 
+ *
  * @param application the application CRD to reconcile
  * @param context reconciliation context with secondary resources
  * @return update control indicating next reconciliation action
@@ -159,7 +189,7 @@ Préférer les virtual threads pour les appels bloquants :
 ```java
 @ApplicationScoped
 public class AsyncOperations {
-    
+
     public CompletableFuture<Void> processInBackground(List<Pod> pods) {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             return CompletableFuture.allOf(
@@ -197,14 +227,15 @@ log.info(logMessage);
 
 ### 3.5 Style fonctionnel
 
-**Préférer la composition de fonctions** pour créer des pipelines de traitement lisibles et maintenables :
+**Préférer la composition de fonctions** pour créer des pipelines de traitement
+lisibles et maintenables :
 
 ```java
 public class PodMutatingWebhook {
-    
+
     // Déclarer les fonctions comme des attributs de classe pour la réutilisabilité
     private final Predicate<Operation> isCreateOp = op -> op == Operation.CREATE;
-    
+
     private final Function<Pod, Optional<CrdRef>> findAnnotation = pod ->
         Optional.ofNullable(pod)
             .flatMap(p -> Optional.ofNullable(p.getMetadata()))
@@ -216,7 +247,8 @@ public class PodMutatingWebhook {
 }
 ```
 
-**Chaîner les opérations avec Optional** pour éviter les vérifications null explicites :
+**Chaîner les opérations avec Optional** pour éviter les vérifications null
+explicites :
 
 ```java
 private AdmissionController<Pod> admissionController() {
@@ -241,16 +273,17 @@ record ReconciliationResult(boolean success, String message, Duration nextReconc
 
 ### 3.6 ADT avec Sealed Interfaces
 
-**Utiliser des sealed interfaces** pour modéliser des types de données algébriques (ADT) qui représentent un ensemble fini et fermé de cas :
+**Utiliser des sealed interfaces** pour modéliser des types de données
+algébriques (ADT) qui représentent un ensemble fini et fermé de cas :
 
 ```java
 // Définition de l'ADT pour l'état d'une reconciliation
-public sealed interface ReconciliationState 
-    permits ReconciliationState.Pending, 
-            ReconciliationState.InProgress, 
-            ReconciliationState.Success, 
+public sealed interface ReconciliationState
+    permits ReconciliationState.Pending,
+            ReconciliationState.InProgress,
+            ReconciliationState.Success,
             ReconciliationState.Failed {
-    
+
     record Pending(String reason) implements ReconciliationState {}
     record InProgress(String phase, int stepCount, int currentStep) implements ReconciliationState {}
     record Success(String message, Instant completedAt) implements ReconciliationState {}
@@ -262,32 +295,32 @@ public sealed interface ReconciliationState
 
 ```java
 public UpdateControl<Application> handleReconciliationState(
-        Application app, 
+        Application app,
         ReconciliationState state) {
-    
+
     return switch (state) {
         case ReconciliationState.Pending(var reason) -> {
             app.getStatus().setMessage(STR."Pending: \{reason}");
             yield UpdateControl.patchStatus(app).rescheduleAfter(Duration.ofSeconds(5));
         }
-        
+
         case ReconciliationState.InProgress(var phase, var total, var current) -> {
             var progress = STR."\{current}/\{total}";
             app.getStatus().setMessage(STR."Processing \{phase} (\{progress})");
             yield UpdateControl.patchStatus(app).rescheduleAfter(Duration.ofSeconds(2));
         }
-        
+
         case ReconciliationState.Success(var message, var completedAt) -> {
             app.getStatus().setState(ApplicationStatus.State.READY);
             app.getStatus().setMessage(message);
             app.getStatus().setLastReconciled(completedAt);
             yield UpdateControl.patchStatus(app);
         }
-        
+
         case ReconciliationState.Failed(var error, var cause, var retryable) -> {
             app.getStatus().setState(ApplicationStatus.State.FAILED);
             app.getStatus().setMessage(STR."Failed: \{error}");
-            
+
             if (retryable) {
                 // Retry avec backoff exponentiel
                 yield UpdateControl.patchStatus(app)
@@ -304,12 +337,12 @@ public UpdateControl<Application> handleReconciliationState(
 **ADT pour les événements métier** :
 
 ```java
-public sealed interface ApplicationEvent permits 
+public sealed interface ApplicationEvent permits
     ApplicationEvent.Created,
     ApplicationEvent.SpecChanged,
     ApplicationEvent.StatusUpdated,
     ApplicationEvent.Deleted {
-    
+
     record Created(Application application, Instant timestamp) implements ApplicationEvent {}
     record SpecChanged(Application application, ApplicationSpec oldSpec, ApplicationSpec newSpec) implements ApplicationEvent {}
     record StatusUpdated(Application application, ApplicationStatus oldStatus, ApplicationStatus newStatus) implements ApplicationEvent {}
@@ -323,18 +356,18 @@ public void handleEvent(ApplicationEvent event) {
             log.info("Application created: {} at {}", app.getMetadata().getName(), timestamp);
             metrics.incrementCounter("application.created");
         }
-        
+
         case ApplicationEvent.SpecChanged(var app, var oldSpec, var newSpec) -> {
             log.info("Application spec changed: {}", app.getMetadata().getName());
             auditLog.recordChange(app, oldSpec, newSpec);
         }
-        
+
         case ApplicationEvent.StatusUpdated(var app, var oldStatus, var newStatus) -> {
             if (oldStatus.getState() != newStatus.getState()) {
                 notificationService.notifyStateChange(app, oldStatus.getState(), newStatus.getState());
             }
         }
-        
+
         case ApplicationEvent.Deleted(var name, var namespace, var timestamp) -> {
             log.info("Application deleted: {}/{} at {}", namespace, name, timestamp);
             cleanupService.cleanupResources(name, namespace);
@@ -346,22 +379,22 @@ public void handleEvent(ApplicationEvent event) {
 **ADT pour les opérations asynchrones** :
 
 ```java
-public sealed interface AsyncOperation<T> permits 
+public sealed interface AsyncOperation<T> permits
     AsyncOperation.NotStarted,
     AsyncOperation.Running,
     AsyncOperation.Completed,
     AsyncOperation.Cancelled {
-    
+
     record NotStarted<T>() implements AsyncOperation<T> {}
     record Running<T>(String operationId, Instant startedAt) implements AsyncOperation<T> {}
     record Completed<T>(T result, Duration executionTime) implements AsyncOperation<T> {}
     record Cancelled<T>(String reason) implements AsyncOperation<T> {}
-    
+
     // Méthodes utilitaires
     default boolean isCompleted() {
         return this instanceof Completed<T>;
     }
-    
+
     default Optional<T> getResult() {
         return switch (this) {
             case Completed<T>(var result, _) -> Optional.of(result);
@@ -376,7 +409,8 @@ public sealed interface AsyncOperation<T> permits
 - **Exhaustivité** : Le compilateur garantit que tous les cas sont traités
 - **Type safety** : Pas de casting ou de vérifications instanceof manuelles
 - **Lisibilité** : Code déclaratif et expressif
-- **Maintenabilité** : Ajouter un nouveau cas force la mise à jour de tous les switch
+- **Maintenabilité** : Ajouter un nouveau cas force la mise à jour de tous les
+  switch
 - **Performance** : Pattern matching optimisé par la JVM
 
 ### 3.7 Gestion des erreurs et exceptions
@@ -400,7 +434,7 @@ public Optional<ApplicationSpec> findApplicationSpec(String name, String namespa
 public class ReconciliationException extends RuntimeException {
     private final String resourceName;
     private final String namespace;
-    
+
     public ReconciliationException(String message, String resourceName, String namespace, Throwable cause) {
         super(STR."[\{namespace}/\{resourceName}] \{message}", cause);
         this.resourceName = resourceName;
@@ -413,7 +447,7 @@ try {
     deployApplication(spec);
 } catch (KubernetesClientException e) {
     throw new ReconciliationException(
-        "Failed to deploy application", 
+        "Failed to deploy application",
         application.getMetadata().getName(),
         application.getMetadata().getNamespace(),
         e
@@ -427,12 +461,12 @@ try {
 public sealed interface Result<T> permits Success, Failure {
     record Success<T>(T value) implements Result<T> {}
     record Failure<T>(String error, Throwable cause) implements Result<T> {}
-    
+
     static <T> Result<T> success(T value) { return new Success<>(value); }
-    static <T> Result<T> failure(String error, Throwable cause) { 
-        return new Failure<>(error, cause); 
+    static <T> Result<T> failure(String error, Throwable cause) {
+        return new Failure<>(error, cause);
     }
-    
+
     default <U> Result<U> map(Function<T, U> mapper) {
         return switch (this) {
             case Success<T>(var value) -> success(mapper.apply(value));
@@ -463,23 +497,23 @@ public sealed interface Result<T> permits Success, Failure {
 public class ApplicationReconciler implements Reconciler<Application>, ContextInitializer<Application> {
 
     private static final Logger log = LoggerFactory.getLogger(ApplicationReconciler.class);
-    
+
     @Override
     public void initContext(Application application, Context<Application> context) {
         // Initialiser le contexte partagé entre les dependent resources
         var labels = createLabels(application);
         context.managedWorkflowAndDependentResourceContext().put("labels", labels);
     }
-    
+
     @Override
     public UpdateControl<Application> reconcile(Application application, Context<Application> context) {
         var name = application.getMetadata().getName();
         log.info("Reconciling application: {}", name);
-        
+
         // Vérifier l'état des ressources dépendantes
         var workflowResult = context.managedWorkflowAndDependentResourceContext()
             .getWorkflowReconcileResult();
-            
+
         return workflowResult
             .filter(WorkflowReconcileResult::allDependentResourcesReady)
             .map(wrs -> {
@@ -517,28 +551,28 @@ public class DeploymentDependent extends CRUDKubernetesDependentResource<Deploym
     public DeploymentDependent() {
         super(Deployment.class);
     }
-    
+
     @Override
     protected Deployment desired(Application application, Context<Application> context) {
         var labels = (Map<String, String>) context.managedWorkflowAndDependentResourceContext()
             .get("labels");
-            
+
         return new DeploymentBuilder()
             .withMetadata(createMetadata(application, labels))
             .withSpec(createDeploymentSpec(application))
             .build();
     }
-    
+
     @Override
     public Result<Deployment> match(Deployment actualResource, Application primary, Context<Application> context) {
         var desired = desired(primary, context);
-        
+
         // Comparer les specs importantes (sans les champs générés par K8s)
         if (Objects.equals(actualResource.getSpec().getReplicas(), desired.getSpec().getReplicas())
                 && Objects.equals(actualResource.getSpec().getTemplate(), desired.getSpec().getTemplate())) {
             return Result.nonMatching();
         }
-        
+
         return Result.matched();
     }
 }
@@ -552,12 +586,12 @@ public class DeploymentDependent extends CRUDKubernetesDependentResource<Deploym
 @Workflow(dependents = {
     @Dependent(name = "configmap", type = ConfigMapDependent.class),
     @Dependent(
-        name = "deployment", 
+        name = "deployment",
         type = DeploymentDependent.class,
         dependsOn = {"configmap"}
     ),
     @Dependent(
-        name = "service", 
+        name = "service",
         type = ServiceDependent.class,
         dependsOn = {"deployment"},
         readyPostcondition = ServiceReadyCondition.class
@@ -587,22 +621,22 @@ public class ServiceReadyCondition implements Condition<Service, Application> {
 ```java
 @ExtendWith(MockitoExtension.class)
 class ApplicationReconcilerTest {
-    
+
     @Mock
     private KubernetesClient client;
-    
+
     @InjectMocks
     private ApplicationReconciler reconciler;
-    
+
     @Test
     void shouldUpdateStatusWhenAllResourcesReady() {
         // Given
         var application = createTestApplication();
         var context = createMockContext(true); // all resources ready
-        
+
         // When
         var result = reconciler.reconcile(application, context);
-        
+
         // Then
         assertThat(result.isUpdateStatus()).isTrue();
         assertThat(application.getStatus().getState()).isEqualTo(State.READY);
@@ -616,10 +650,10 @@ class ApplicationReconcilerTest {
 @QuarkusTest
 @Testcontainers
 class ApplicationReconcilerIT {
-    
+
     @Container
     static K3sContainer k3s = new K3sContainer(DockerImageName.parse("rancher/k3s:latest"));
-    
+
     @Test
     void shouldReconcileApplicationSuccessfully() {
         // Test avec un vrai cluster Kubernetes
@@ -660,35 +694,35 @@ import static io.javaoperatorsdk.operator.api.reconciler.UpdateControl.patchStat
 public class CacheReconciler implements Reconciler<DependencyCache> {
 
     private static final Logger log = LoggerFactory.getLogger(CacheReconciler.class);
-    
+
     // Style fonctionnel pour les transformations
-    private final Function<DependencyCache, UpdateControl<DependencyCache>> reconcileLogic = cache -> 
+    private final Function<DependencyCache, UpdateControl<DependencyCache>> reconcileLogic = cache ->
         Optional.of(cache)
             .filter(this::isSpecValid)
             .map(this::processCache)
             .map(this::updateStatus)
             .orElseGet(() -> this.handleInvalidSpec(cache));
-    
+
     @Override
     public UpdateControl<DependencyCache> reconcile(DependencyCache cache, Context<DependencyCache> context) {
         return reconcileLogic.apply(cache);
     }
-    
+
     private boolean isSpecValid(DependencyCache cache) {
         return cache.getSpec() != null && cache.getSpec().getSize() != null;
     }
-    
+
     private DependencyCache processCache(DependencyCache cache) {
         log.info("Processing cache: {}", cache.getMetadata().getName());
         // Logique métier
         return cache;
     }
-    
+
     private UpdateControl<DependencyCache> updateStatus(DependencyCache cache) {
         cache.setStatus(new DependencyCacheStatus(State.READY, "Cache is ready"));
         return patchStatus(cache);
     }
-    
+
     private UpdateControl<DependencyCache> handleInvalidSpec(DependencyCache cache) {
         cache.setStatus(new DependencyCacheStatus(State.FAILED, "Invalid specification"));
         return patchStatus(cache);
@@ -700,8 +734,10 @@ Cette version revisée des conventions apporte :
 
 ## ✅ **Améliorations apportées :**
 
-1. **Structure claire** - Organisation modulaire avec répartition des responsabilités
-2. **Java 21 moderne** - Usage des dernières fonctionnalités (records, pattern matching, virtual threads)
+1. **Structure claire** - Organisation modulaire avec répartition des
+   responsabilités
+2. **Java 21 moderne** - Usage des dernières fonctionnalités (records, pattern
+   matching, virtual threads)
 3. **Style fonctionnel** - Composition de fonctions, Optional, immutabilité
 4. **Gestion d'erreurs robuste** - Exceptions typées, pattern Result
 5. **Tests complets** - Exemples unitaires et d'intégration
@@ -709,4 +745,5 @@ Cette version revisée des conventions apporte :
 7. **Bonnes pratiques JOSDK** - Workflows, dependent resources, conditions
 8. **Documentation complète** - Javadoc, commentaires, formatting
 
-Le fichier est maintenant beaucoup plus complet et utilisable comme référence pour le développement d'opérateurs Kubernetes modernes en Java 21.
+Le fichier est maintenant beaucoup plus complet et utilisable comme référence
+pour le développement d'opérateurs Kubernetes modernes en Java 21.

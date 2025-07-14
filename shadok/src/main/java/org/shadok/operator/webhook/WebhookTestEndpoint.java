@@ -168,7 +168,7 @@ public class WebhookTestEndpoint {
     return null;
   }
 
-  /** Record pour les requêtes de test */
+  /** Record for test requests */
   public record TestPodRequest(
       String podName,
       String namespace,

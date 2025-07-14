@@ -1,6 +1,6 @@
 plugins {
     `java-platform`
-    alias(libs.plugins.spotless) apply false
+    alias(libs.plugins.spotless)
 }
 
 description = "Shadok Parent - BOM for dependency management"
@@ -17,6 +17,19 @@ dependencies {
     constraints {
         // Additional dependencies
         api(libs.kubernetes.webhooks.core)
+    }
+}
+
+// Configuration Spotless pour le projet racine
+configure<com.diffplug.gradle.spotless.SpotlessExtension> {
+    format("markdown") {
+        target("*.md")
+        prettier().config(mapOf(
+            "parser" to "markdown",
+            "proseWrap" to "always",
+            "printWidth" to 80,
+            "tabWidth" to 2
+        ))
     }
 }
 
