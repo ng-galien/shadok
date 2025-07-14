@@ -4,6 +4,9 @@ metadata:
   name: test-project
   namespace: shadok
 spec:
-  gitUrl: "https://github.com/example/test-project.git"
-  branch: "main"
+  persistentVolumeName: "test-project-pv"
+  sourcePath: "/project"
+  pvcName: "test-project-pvc"
+  storageClass: "standard"
   storageSize: "1Gi"
+  accessMode: "ReadOnlyMany"

@@ -4,5 +4,9 @@ metadata:
   name: test-cache
   namespace: shadok
 spec:
-  cacheType: "gradle"
+  persistentVolumeName: "test-cache-pv"
+  cachePath: "/cache"
+  pvcName: "test-cache-pvc"
+  storageClass: "standard"
+  accessMode: "ReadWriteOnce"
   storageSize: "2Gi"

@@ -53,7 +53,7 @@ public class ApplicationReconciler implements Reconciler<Application> {
     var name = application.getMetadata().getName();
     var namespace = application.getMetadata().getNamespace();
 
-    log.info("Reconciling Application: {}/{}", namespace, name);
+    log.info("🚀 Reconciling Application avec le nouveau code fonctionnel: {}/{}", namespace, name);
 
     try {
       return reconcileLogic.apply(application);
