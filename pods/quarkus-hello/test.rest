@@ -1,0 +1,3 @@
+###
+GET https://quarkus-hello.127.0.0.1.nip.io/hello
+Content-Type: */*

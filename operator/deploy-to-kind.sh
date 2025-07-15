@@ -206,9 +206,15 @@ setup_ingress_controller() {
 setup_local_registry() {
     print_header "Configuration du Registre Local"
 
-    # Vérifier si le registre existe déjà
+    # Vérifier si le registre shadok-registry existe déjà (créé par start-kind.sh)
+    if docker ps | grep -q "shadok-registry"; then
+        print_success "Registre local 'shadok-registry' déjà en cours d'exécution"
+        return 0
+    fi
+
+    # Vérifier si le registre kind-registry existe déjà
     if docker ps | grep -q "kind-registry"; then
-        print_success "Registre local déjà en cours d'exécution"
+        print_success "Registre local 'kind-registry' déjà en cours d'exécution"
         return 0
     fi
 
@@ -374,17 +380,23 @@ EOF
 
 deploy_crds() {
     print_header "Déploiement des Custom Resource Definitions"
-    
+
     print_step "Application des CRDs Shadok..."
-    
-    # Appliquer les ressources générées par Quarkus
-    if [ -d "build/kubernetes" ]; then
-        kubectl apply -f build/kubernetes/kubernetes.yml || {
-            print_error "Échec du déploiement des ressources"
-            exit 1
-        }
+
+    # Appliquer les CRDs depuis le répertoire kubernetes/
+    if [ -d "kubernetes" ]; then
+        # Appliquer chaque CRD individuellement
+        for crd_file in kubernetes/applications.shadok.org-v1.yml kubernetes/projectsources.shadok.org-v1.yml kubernetes/dependencycaches.shadok.org-v1.yml; do
+            if [ -f "$crd_file" ]; then
+                print_step "Application de $(basename $crd_file)..."
+                kubectl apply -f "$crd_file" || {
+                    print_error "Échec du déploiement de $crd_file"
+                    exit 1
+                }
+            fi
+        done
     else
-        print_error "Répertoire build/kubernetes non trouvé"
+        print_error "Répertoire kubernetes/ non trouvé"
         exit 1
     fi
 
@@ -448,181 +460,68 @@ EOF
 deploy_operator() {
     print_header "Déploiement de l'Opérateur Shadok"
 
-    print_step "Création du Deployment de l'opérateur..."
+    print_step "Déploiement de l'opérateur depuis les ressources Quarkus..."
 
-    cat << EOF | kubectl apply -f -
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: shadok-operator
-  namespace: $NAMESPACE
-  labels:
-    app: shadok-operator
-    app.kubernetes.io/name: shadok-operator
-    app.kubernetes.io/part-of: shadok
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: shadok-operator
-  template:
-    metadata:
-      labels:
-        app: shadok-operator
-    spec:
-      serviceAccountName: shadok-operator
-      containers:
-      - name: operator
-        image: $FULL_IMAGE
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 8080
-          name: http
-        - containerPort: 8443
-          name: webhook
-        env:
-        - name: QUARKUS_PROFILE
-          value: "prod"
-        - name: QUARKUS_KUBERNETES_NAMESPACE
-          value: "$NAMESPACE"
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "500m"
-          limits:
-            memory: "2Gi"
-            cpu: "2000m"
-        livenessProbe:
-          httpGet:
-            path: /q/health/live
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /q/health/ready
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: shadok-operator
-  namespace: $NAMESPACE
-  labels:
-    app: shadok-operator
-spec:
-  selector:
-    app: shadok-operator
-  ports:
-  - name: http
-    port: 80
-    targetPort: 8080
-  - name: webhook
-    port: 443
-    targetPort: 8443
-  type: ClusterIP
-EOF
+    # Appliquer les ressources générées par Quarkus
+    if [ -d "build/kubernetes" ] && [ -f "build/kubernetes/kubernetes.yml" ]; then
+        kubectl apply -f build/kubernetes/kubernetes.yml || {
+            print_error "Échec du déploiement des ressources Quarkus"
+            exit 1
+        }
+    else
+        print_error "Fichier build/kubernetes/kubernetes.yml non trouvé"
+        print_step "Assurez-vous d'avoir exécuté './gradlew build' avant"
+        exit 1
+    fi
 
     # Attendre que l'opérateur soit prêt
     wait_for_condition "Opérateur prêt" \
-        "kubectl get pods -n $NAMESPACE -l app=shadok-operator --field-selector=status.phase=Running | grep -q Running" \
+        "kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=operator --field-selector=status.phase=Running | grep -q Running" \
         $WAIT_TIMEOUT 10
 
     print_success "Opérateur Shadok déployé"
 }
 
 configure_webhook() {
-    print_header "Configuration du Webhook de Mutation"
+    print_header "Configuration du Webhook de Mutation avec TLS"
 
-    print_step "Configuration du MutatingWebhookConfiguration..."
+    print_step "Configuration du MutatingWebhookConfiguration avec cert-manager..."
 
     # Attendre que le service soit disponible
     wait_for_condition "Service opérateur disponible" \
-        "kubectl get service shadok-operator -n $NAMESPACE" \
+        "kubectl get service operator -n $NAMESPACE" \
         60
 
-    # Note: Dans un environnement de production, il faudrait générer des certificats TLS
-    # Pour Kind/développement, nous utilisons une configuration simplifiée
-    cat << EOF | kubectl apply -f -
-apiVersion: admissionregistration.k8s.io/v1
-kind: MutatingWebhookConfiguration
-metadata:
-  name: shadok-pod-mutator
-webhooks:
-- name: pod-mutator.shadok.org
-  clientConfig:
-    service:
-      name: shadok-operator
-      namespace: $NAMESPACE
-      path: /mutate-pods
-  rules:
-  - operations: ["CREATE"]
-    apiGroups: [""]
-    apiVersions: ["v1"]
-    resources: ["pods"]
-  admissionReviewVersions: ["v1", "v1beta1"]
-  sideEffects: None
-  failurePolicy: Ignore
-EOF
-
-    print_success "Webhook de mutation configuré"
-}
-
-# ========================================
-# 🧪 Déploiement des Ressources de Test
-# ========================================
-
-deploy_test_resources() {
-    print_header "Déploiement des Ressources de Test"
-
-    if [ "$SKIP_TESTS" = true ]; then
-        print_warning "Tests ignorés"
-        return 0
+    # Vérifier que cert-manager est installé
+    if ! kubectl get namespace cert-manager > /dev/null 2>&1; then
+        print_error "cert-manager n'est pas installé. Veuillez d'abord installer cert-manager."
+        print_step "Vous pouvez utiliser le script start-kind.sh mis à jour pour installer cert-manager."
+        exit 1
     fi
 
-    print_step "Déploiement des ressources Shadok de test..."
+    # Attendre que cert-manager soit prêt
+    wait_for_condition "cert-manager prêt" \
+        "kubectl get pods -n cert-manager -l app.kubernetes.io/instance=cert-manager --field-selector=status.phase=Running | grep -q Running" \
+        60
 
-    # Utiliser le fichier de test existant s'il existe
-    if [ -f "../pods/quarkus-hello/k8s/shadok-resources.yml" ]; then
-        kubectl apply -f ../pods/quarkus-hello/k8s/shadok-resources.yml || {
-            print_warning "Échec du déploiement des ressources de test"
+    # Appliquer la configuration du webhook avec TLS via cert-manager
+    print_step "Application de la configuration du webhook avec TLS..."
+    if [ -f "kubernetes/webhook.yaml" ]; then
+        kubectl apply -f kubernetes/webhook.yaml || {
+            print_error "Échec de l'application de la configuration du webhook"
+            exit 1
         }
     else
-        print_warning "Fichier de ressources de test non trouvé"
+        print_error "Fichier kubernetes/webhook.yaml non trouvé"
+        exit 1
     fi
 
-    print_success "Ressources de test déployées"
-}
+    # Attendre que le certificat soit prêt
+    wait_for_condition "Certificat prêt" \
+        "kubectl get certificate webhook-server-cert -n $NAMESPACE -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}' | grep -q True" \
+        60
 
-deploy_sample_application() {
-    print_header "Déploiement d'une Application Exemple"
-
-    if [ "$SKIP_TESTS" = true ]; then
-        print_warning "Application exemple ignorée"
-        return 0
-    fi
-
-    print_step "Déploiement du webservice quarkus-hello..."
-
-    # Déployer quarkus-hello si les manifestes existent
-    if [ -d "../pods/quarkus-hello/k8s" ]; then
-        kubectl apply -f ../pods/quarkus-hello/k8s/ || {
-            print_warning "Échec du déploiement de quarkus-hello"
-        }
-
-        # Attendre que l'application soit prête
-        wait_for_condition "Application quarkus-hello prête" \
-            "kubectl get pods -n $NAMESPACE -l app=quarkus-hello --field-selector=status.phase=Running | grep -q Running" \
-            120 10 || {
-            print_warning "Application quarkus-hello pas complètement prête"
-        }
-    else
-        print_warning "Manifestes quarkus-hello non trouvés"
-    fi
-
-    print_success "Application exemple déployée"
+    print_success "Webhook de mutation configuré avec TLS"
 }
 
 # ========================================
@@ -647,7 +546,7 @@ validate_deployment() {
     done
 
     # Vérifier l'opérateur
-    if kubectl get pods -n "$NAMESPACE" -l app=shadok-operator --field-selector=status.phase=Running | grep -q Running; then
+    if kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/name=operator --field-selector=status.phase=Running | grep -q Running; then
         log_verbose "Opérateur en cours d'exécution ✓"
     else
         print_error "Opérateur non démarré"
@@ -689,12 +588,12 @@ show_deployment_info() {
     echo ""
     echo "📋 Commandes utiles:"
     echo "  kubectl get pods -n $NAMESPACE"
-    echo "  kubectl logs -n $NAMESPACE -l app=shadok-operator"
+    echo "  kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=operator"
     echo "  kubectl get applications,projectsources,dependencycaches -n $NAMESPACE"
     echo ""
     echo "🧪 Tests:"
     echo "  ./test-operator.sh"
-    echo "  cd operator && ./test-webhook.sh health"
+    echo "  cd ../pods/quarkus-hello && ./deploy-to-kind.sh"
     echo ""
 }
 
@@ -713,7 +612,7 @@ show_help() {
     echo "  --image-tag TAG        Tag de l'image (défaut: $IMAGE_TAG)"
     echo "  --no-rebuild           Ne pas reconstruire l'image"
     echo "  --redeploy-cluster     Supprimer et recréer le cluster"
-    echo "  --skip-tests           Ignorer le déploiement des ressources de test"
+    echo "  --skip-tests           Ignorer les validations avancées"
     echo "  --timeout SECS         Timeout d'attente (défaut: $WAIT_TIMEOUT)"
     echo "  --verbose              Logs détaillés"
     echo "  --help                 Affiche cette aide"
@@ -804,11 +703,8 @@ main() {
     deploy_persistent_volumes
     build_operator_image
     deploy_crds
-    deploy_rbac
     deploy_operator
     configure_webhook
-    deploy_test_resources
-    deploy_sample_application
 
     # Validation finale
     if validate_deployment; then

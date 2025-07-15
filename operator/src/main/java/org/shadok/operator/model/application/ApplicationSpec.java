@@ -23,7 +23,10 @@ public record ApplicationSpec(
             "List of volume mounts for init containers from the ProjectSource volume")
         List<InitContainerMountSpec> initContainerMounts,
     @JsonPropertyDescription("Optional labels to apply to resources created by this application")
-        Map<String, String> labels) {
+        Map<String, String> labels,
+    @JsonPropertyDescription(
+            "Optional name of the main container to mutate. If not specified, uses the first container or raises an error if multiple containers exist")
+        String containerName) {
   public ApplicationSpec {
     applicationType = Objects.requireNonNull(applicationType, "applicationType cannot be null");
     projectSourceName =
@@ -32,5 +35,6 @@ public record ApplicationSpec(
         Objects.requireNonNull(dependencyCacheName, "dependencyCacheName cannot be null");
     initContainerMounts = Objects.requireNonNullElse(initContainerMounts, List.of());
     labels = Objects.requireNonNullElse(labels, Map.of());
+    // containerName is optional, can be null
   }
 }

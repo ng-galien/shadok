@@ -1,152 +1,530 @@
 #!/bin/bash
 
-# Script de déploiement Quarkus vers Kubernetes (Kind)
-# Ce script automatise le processus de construction, chargement d'image et déploiement
+# 🚀 Deploy Quarkus Hello to Kind - Deployment Management
+# ======================================================
+#
+# Script pour gérer le déploiement de l'application quarkus-hello
+# avec les ressources Shadok CRDs dans Kind
+#
+# Usage: ./deploy-to-kind.sh [action] [options]
 
 set -e
-
-echo "🚀 Déploiement de quarkus-hello vers Kind..."
 
 # Configuration
 CLUSTER_NAME="shadok-dev"
 NAMESPACE="shadok"
-IMAGE_NAME="shadok-pods/quarkus-hello:latest"
-REGISTRY_IMAGE_NAME="localhost:5001/shadok-pods/quarkus-hello:latest"
-APP_NAME="quarkus-hello"
+REGISTRY="localhost:5001"
+IMAGE_NAME="quarkus-hello"
+IMAGE_TAG="latest"
+FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
 
-# Couleurs pour les logs
+# Couleurs
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+PURPLE='\033[0;35m'
+NC='\033[0m'
 
-log_info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
+print_header() {
+    echo -e "\n${PURPLE}===============================================${NC}"
+    echo -e "${PURPLE} 🚀 $1${NC}"
+    echo -e "${PURPLE}===============================================${NC}\n"
 }
 
-log_success() {
+print_step() {
+    echo -e "${BLUE}📋 $1${NC}"
+}
+
+print_success() {
     echo -e "${GREEN}✅ $1${NC}"
 }
 
-log_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
-
-log_error() {
+print_error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
-# Vérifier que Kind est installé
-if ! command -v kind &> /dev/null; then
-    log_error "Kind n'est pas installé. Veuillez l'installer d'abord."
+print_warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
+# Vérifier les prérequis
+check_prerequisites() {
+    print_header "Vérification des Prérequis"
+    
+    for tool in kind kubectl docker gradle; do
+        if ! command -v $tool > /dev/null 2>&1; then
+            print_error "$tool n'est pas installé"
+            exit 1
+        fi
+    done
+    
+    if ! docker info > /dev/null 2>&1; then
+        print_error "Docker n'est pas en cours d'exécution"
+        exit 1
+    fi
+    
+    print_success "Tous les prérequis sont OK"
+}
+
+# Vérifier le cluster Kind
+check_cluster() {
+    print_header "Vérification du Cluster Kind"
+    
+    if ! kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
+        print_error "Cluster Kind '$CLUSTER_NAME' non trouvé"
+        print_step "Démarrez d'abord l'opérateur avec: cd ../../operator && ./deploy-to-kind.sh"
+        exit 1
+    fi
+    
+    if ! kubectl cluster-info --context "kind-${CLUSTER_NAME}" > /dev/null 2>&1; then
+        print_error "Impossible de se connecter au cluster"
+        exit 1
+    fi
+    
+    print_success "Cluster '$CLUSTER_NAME' accessible"
+}
+
+# Construire l'image
+build_image() {
+    print_header "Construction de l'Image"
+    
+    print_step "Build Gradle..."
+    ./gradlew build -x test
+    
+    print_step "Build image Docker..."
+    docker build -f src/main/docker/Dockerfile.jvm -t "$FULL_IMAGE" .
+    
+    print_step "Push vers le registre local..."
+    docker push "$FULL_IMAGE"
+    
+    print_success "Image $FULL_IMAGE construite et poussée"
+}
+
+# Déployer l'application avec CRDs
+deploy_app() {
+    print_header "Déploiement de l'Application"
+    
+    # S'assurer que les PVCs sont dans le bon namespace
+    ensure_pvcs_namespace
+    
+    print_step "Application des ressources Shadok CRDs..."
+    kubectl apply -f k8s/shadok-resources.yml
+    
+    print_step "Attente que l'opérateur traite les ressources..."
+    sleep 10
+    
+    # Vérifier que l'application est créée
+    if kubectl get application quarkus-hello-app -n "$NAMESPACE" > /dev/null 2>&1; then
+        print_success "Ressources Shadok CRDs appliquées"
+    else
+        print_error "Échec de la création des ressources CRDs"
+        return 1
+    fi
+    
+    # Déployer l'application avec le manifest Quarkus (qui contient l'annotation Shadok)
+    print_step "Déploiement de l'application avec le manifest Quarkus..."
+    kubectl apply -f build/kubernetes/kind.yml
+    
+    print_step "Attente que le déploiement soit prêt..."
+    kubectl wait --for=condition=available deployment/quarkus-hello -n "$NAMESPACE" --timeout=120s
+    
+    print_success "Application déployée avec l'annotation Shadok"
+}
+
+# Désinstaller l'application
+uninstall_app() {
+    print_header "Désinstallation de l'Application"
+    
+    print_step "Suppression des ressources Shadok CRDs..."
+    kubectl delete -f k8s/shadok-resources.yml --ignore-not-found=true
+    
+    print_step "Attente de la suppression des ressources..."
+    sleep 5
+    
+    # Vérifier que les ressources sont supprimées
+    local resources_deleted=true
+    for app in quarkus-hello-app test-app; do
+        if kubectl get application $app -n "$NAMESPACE" > /dev/null 2>&1; then
+            resources_deleted=false
+            break
+        fi
+    done
+    
+    if [ "$resources_deleted" = true ]; then
+        print_success "Ressources Shadok supprimées"
+    else
+        print_warning "Certaines ressources peuvent encore exister"
+    fi
+    
+    # Nettoyer les déploiements restants
+    print_step "Nettoyage des déploiements restants..."
+    kubectl delete deployment quarkus-hello -n "$NAMESPACE" --ignore-not-found=true
+    kubectl delete service quarkus-hello -n "$NAMESPACE" --ignore-not-found=true
+    kubectl delete ingress quarkus-hello -n "$NAMESPACE" --ignore-not-found=true
+    
+    print_success "Désinstallation terminée"
+}
+
+# Redémarrer le pod
+restart_app() {
+    print_header "Redémarrage de l'Application"
+    
+    # Vérifier que l'application existe
+    if ! kubectl get deployment quarkus-hello -n "$NAMESPACE" > /dev/null 2>&1; then
+        print_error "Aucun déploiement 'quarkus-hello' trouvé"
+        print_step "Utilisez --install pour déployer l'application d'abord"
+        return 1
+    fi
+    
+    print_step "Redémarrage du déploiement..."
+    kubectl rollout restart deployment/quarkus-hello -n "$NAMESPACE"
+    
+    print_step "Attente du redémarrage..."
+    kubectl rollout status deployment/quarkus-hello -n "$NAMESPACE" --timeout=120s
+    
+    print_success "Application redémarrée"
+}
+
+# Installer les CRDs
+install_crds() {
+    print_header "Installation des CRDs Shadok"
+    
+    print_step "Application des ressources CRDs..."
+    kubectl apply -f k8s/shadok-resources.yml
+    
+    print_step "Vérification des ressources créées..."
+    
+    # Lister les ressources créées
+    echo ""
+    echo "📋 Ressources créées :"
+    kubectl get applications -n "$NAMESPACE" 2>/dev/null || echo "  Aucune Application"
+    kubectl get projectsources -n "$NAMESPACE" 2>/dev/null || echo "  Aucune ProjectSource"
+    kubectl get dependencycaches -n "$NAMESPACE" 2>/dev/null || echo "  Aucune DependencyCache"
+    echo ""
+    
+    print_success "CRDs installées"
+}
+
+# Désinstaller les CRDs
+uninstall_crds() {
+    print_header "Désinstallation des CRDs Shadok"
+    
+    print_step "Suppression des ressources CRDs..."
+    kubectl delete -f k8s/shadok-resources.yml --ignore-not-found=true
+    
+    print_step "Nettoyage des ressources restantes..."
+    # Nettoyer les PVCs si elles existent
+    kubectl delete pvc quarkus-hello-source-pvc -n "$NAMESPACE" --ignore-not-found=true
+    kubectl delete pvc java-cache-pvc -n "$NAMESPACE" --ignore-not-found=true
+    
+    print_success "CRDs désinstallées"
+}
+
+# S'assurer que les PVCs sont dans le bon namespace
+ensure_pvcs_namespace() {
+    print_header "Vérification des PVCs"
+    
+    # Vérifier si les PVCs existent dans le mauvais namespace (default)
+    local wrong_pvcs=$(kubectl get pvc -n default -l app=shadok --no-headers 2>/dev/null | wc -l)
+    if [ "$wrong_pvcs" -gt 0 ]; then
+        print_warning "PVCs trouvées dans le namespace 'default', nettoyage nécessaire"
+        
+        # Supprimer les PVCs du namespace default
+        print_step "Suppression des PVCs du namespace 'default'..."
+        kubectl delete pvc -n default -l app=shadok --ignore-not-found=true
+        
+        # Nettoyer les PVs pour qu'ils redeviennent Available
+        print_step "Nettoyage des PersistentVolumes..."
+        for pv in $(kubectl get pv -l app=shadok --no-headers | awk '{print $1}'); do
+            kubectl patch pv "$pv" --type merge -p '{"spec":{"claimRef":null}}'
+        done
+        
+        print_success "Nettoyage terminé"
+    fi
+    
+    # Créer le namespace shadok s'il n'existe pas
+    print_step "Création du namespace 'shadok' si nécessaire..."
+    kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+    
+    # Vérifier si les PVCs existent dans le bon namespace
+    local correct_pvcs=$(kubectl get pvc -n "$NAMESPACE" -l app=shadok --no-headers 2>/dev/null | wc -l)
+    if [ "$correct_pvcs" -eq 0 ]; then
+        print_step "Création des PVCs dans le namespace '$NAMESPACE'..."
+        
+        # Créer les PVCs pour quarkus-hello
+        kubectl apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-quarkus-hello-sources
+  namespace: $NAMESPACE
+  labels:
+    app: shadok
+    pod: quarkus-hello
+    type: sources
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-storage
+  selector:
+    matchLabels:
+      pod: quarkus-hello
+      type: sources
+EOF
+        
+        print_success "PVCs créées dans le namespace '$NAMESPACE'"
+    else
+        print_success "PVCs déjà présentes dans le namespace '$NAMESPACE'"
+    fi
+}
+
+# Tester l'application
+test_app() {
+    print_header "Test de l'Application"
+    
+    # Utiliser directement l'URL nip.io
+    local ingress_url="http://quarkus-hello.127.0.0.1.nip.io"
+    print_step "URL de test: $ingress_url"
+    
+    # Vérifier que l'ingress est prêt
+    print_step "Vérification de l'ingress..."
+    local ingress_ready=false
+    for i in {1..10}; do
+        local ingress_address=$(kubectl get ingress quarkus-hello -n "$NAMESPACE" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+        if [ -z "$ingress_address" ]; then
+            ingress_address=$(kubectl get ingress quarkus-hello -n "$NAMESPACE" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+        fi
+        if [ -n "$ingress_address" ]; then
+            ingress_ready=true
+            print_success "Ingress prêt avec l'adresse: $ingress_address"
+            break
+        fi
+        sleep 2
+    done
+    
+    if [ "$ingress_ready" = false ]; then
+        print_warning "Ingress pas encore prêt, mais test direct avec nip.io"
+    fi
+    
+    print_step "Attente que l'application soit prête..."
+    sleep 5
+    
+    # Test de l'endpoint principal
+    print_step "Test: curl $ingress_url/hello"
+    local hello_response=$(curl -s "$ingress_url/hello" 2>/dev/null || echo "")
+    if [ -n "$hello_response" ] && echo "$hello_response" | grep -q "Hello"; then
+        print_success "✅ Endpoint /hello: $hello_response"
+    else
+        print_error "❌ Endpoint /hello inaccessible"
+        return 1
+    fi
+    
+    # Test de l'endpoint JSON
+    print_step "Test: curl $ingress_url/hello/json"
+    local json_response=$(curl -s "$ingress_url/hello/json" 2>/dev/null || echo "")
+    if [ -n "$json_response" ] && echo "$json_response" | grep -q "message"; then
+        print_success "✅ Endpoint /hello/json: $json_response"
+    else
+        print_warning "⚠️  Endpoint /hello/json inaccessible ou format inattendu"
+    fi
+    
+    echo ""
+    print_success "🎉 Application accessible via: $ingress_url"
+}
+
+
+# Afficher les informations de déploiement
+show_status() {
+    print_header "État du Déploiement"
+    
+    echo "🎯 Application: quarkus-hello"
+    echo "📦 Namespace: $NAMESPACE"
+    echo "🏷️  Image: $FULL_IMAGE"
+    echo ""
+    
+    # État des ressources CRDs
+    echo "📋 Ressources Shadok CRDs:"
+    kubectl get applications -n "$NAMESPACE" 2>/dev/null || echo "  Aucune Application"
+    kubectl get projectsources -n "$NAMESPACE" 2>/dev/null || echo "  Aucune ProjectSource"  
+    kubectl get dependencycaches -n "$NAMESPACE" 2>/dev/null || echo "  Aucune DependencyCache"
+    echo ""
+    
+    # État du déploiement
+    echo "📋 Déploiement Kubernetes:"
+    if kubectl get deployment quarkus-hello -n "$NAMESPACE" > /dev/null 2>&1; then
+        kubectl get deployment quarkus-hello -n "$NAMESPACE"
+        kubectl get pods -n "$NAMESPACE" -l app=quarkus-hello
+    else
+        echo "  Aucun déploiement actif"
+    fi
+    echo ""
+    
+    # Ingress
+    if kubectl get ingress quarkus-hello -n "$NAMESPACE" > /dev/null 2>&1; then
+        echo "🌐 Accès via Ingress:"
+        echo "  http://quarkus-hello.127.0.0.1.nip.io/hello"
+        echo "  http://quarkus-hello.127.0.0.1.nip.io/hello/json"
+        echo "  https://quarkus-hello.127.0.0.1.nip.io/hello (HTTPS)"
+        echo ""
+        echo "🧪 Tests:"
+        echo "  curl http://quarkus-hello.127.0.0.1.nip.io/hello"
+        echo "  curl http://quarkus-hello.127.0.0.1.nip.io/hello/json"
+        echo "  curl -k https://quarkus-hello.127.0.0.1.nip.io/hello"
+    else
+        echo "🌐 Aucun ingress configuré"
+    fi
+    echo ""
+}
+
+# Fonction principale
+main() {
+    local ACTION="install"  # Action par défaut
+    local SKIP_BUILD=false
+    local SKIP_TESTS=false
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --install)
+                ACTION="install"
+                shift
+                ;;
+            --uninstall)
+                ACTION="uninstall"
+                shift
+                ;;
+            --restart)
+                ACTION="restart"
+                shift
+                ;;
+            --install-crd)
+                ACTION="install-crd"
+                shift
+                ;;
+            --uninstall-crd)
+                ACTION="uninstall-crd"
+                shift
+                ;;
+            --skip-build)
+                SKIP_BUILD=true
+                shift
+                ;;
+            --skip-tests)
+                SKIP_TESTS=true
+                shift
+                ;;
+            --help)
+                echo "Usage: $0 [action] [options]"
+                echo ""
+                echo "Actions (mutuellement exclusives):"
+                echo "  --install        Construire et déployer l'application (défaut)"
+                echo "  --uninstall      Supprimer le déploiement"
+                echo "  --restart        Redémarrer le pod"
+                echo "  --install-crd    Installer seulement les ressources CRDs"
+                echo "  --uninstall-crd  Désinstaller seulement les ressources CRDs"
+                echo ""
+                echo "Options (pour --install seulement):"
+                echo "  --skip-build     Ne pas reconstruire l'image"
+                echo "  --skip-tests     Ignorer les tests"
+                echo "  --help           Afficher cette aide"
+                echo ""
+                echo "Exemples:"
+                echo "  $0                    # Installation complète (défaut)"
+                echo "  $0 --install          # Installation complète explicite"
+                echo "  $0 --install --skip-build  # Installation sans rebuild"
+                echo "  $0 --uninstall        # Désinstallation"
+                echo "  $0 --restart          # Redémarrage"
+                echo "  $0 --install-crd      # Installation CRDs seulement"
+                echo "  $0 --uninstall-crd    # Désinstallation CRDs seulement"
+                exit 0
+                ;;
+            *)
+                print_error "Option inconnue: $1"
+                echo "Utilisez --help pour voir les options disponibles"
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Header
+    echo -e "${PURPLE}"
+    echo "🚀 ======================================== 🚀"
+    echo "   Deploy Quarkus Hello to Kind"
+    case $ACTION in
+        "install")
+            echo "   Action: Installation (Build + Deploy + Test)"
+            ;;
+        "uninstall")
+            echo "   Action: Désinstallation"
+            ;;
+        "restart")
+            echo "   Action: Redémarrage"
+            ;;
+        "install-crd")
+            echo "   Action: Installation CRDs"
+            ;;
+        "uninstall-crd")
+            echo "   Action: Désinstallation CRDs"
+            ;;
+    esac
+    echo "========================================"
+    echo -e "${NC}"
+    
+    # Vérifications communes
+    check_prerequisites
+    check_cluster
+    
+    # Exécution selon l'action
+    case $ACTION in
+        "install")
+            if [ "$SKIP_BUILD" = false ]; then
+                build_image
+            fi
+            deploy_app
+            if [ "$SKIP_TESTS" = false ]; then
+                test_app
+            fi
+            show_status
+            print_success "🎉 Installation terminée avec succès !"
+            ;;
+        "uninstall")
+            uninstall_app
+            show_status
+            print_success "🗑️  Désinstallation terminée !"
+            ;;
+        "restart")
+            restart_app
+            if [ "$SKIP_TESTS" = false ]; then
+                test_app
+            fi
+            show_status
+            print_success "🔄 Redémarrage terminé !"
+            ;;
+        "install-crd")
+            install_crds
+            show_status
+            print_success "📦 Installation CRDs terminée !"
+            ;;
+        "uninstall-crd")
+            uninstall_crds
+            show_status
+            print_success "🗑️  Désinstallation CRDs terminée !"
+            ;;
+        *)
+            print_error "Action inconnue: $ACTION"
+            exit 1
+            ;;
+    esac
+}
+
+# Vérifier qu'on est dans le bon répertoire
+if [ ! -f "build.gradle.kts" ] || [ ! -d "src/main/java" ]; then
+    print_error "Ce script doit être exécuté depuis le répertoire pods/quarkus-hello/"
     exit 1
 fi
 
-# Vérifier que kubectl est installé
-if ! command -v kubectl &> /dev/null; then
-    log_error "kubectl n'est pas installé. Veuillez l'installer d'abord."
-    exit 1
-fi
-
-# Vérifier que le cluster Kind existe
-if ! kind get clusters | grep -q "shadok-dev"; then
-    log_error "Le cluster Kind 'shadok-dev' n'existe pas. Veuillez le créer d'abord."
-    exit 1
-fi
-
-# Vérifier que la registry locale est en marche
-if ! docker ps | grep -q "shadok-registry"; then
-    log_error "La registry locale 'shadok-registry' n'est pas en marche. Lancez ./start-kind.sh d'abord."
-    exit 1
-fi
-
-# Vérifier que le contexte kubectl est correct
-CURRENT_CONTEXT=$(kubectl config current-context)
-if [[ "$CURRENT_CONTEXT" != "kind-shadok-dev" ]]; then
-    log_warning "Le contexte kubectl actuel est '$CURRENT_CONTEXT'. Changement vers 'kind-shadok-dev'..."
-    kubectl config use-context kind-shadok-dev
-fi
-
-# Étape 1: Construire l'application et l'image
-log_info "Construction de l'application Quarkus..."
-./gradlew build -Dquarkus.profile=kind
-
-if [ $? -eq 0 ]; then
-    log_success "Application construite avec succès"
-else
-    log_error "Échec de la construction de l'application"
-    exit 1
-fi
-
-# Étape 2: Pousser l'image vers la registry locale
-log_info "Tag et push de l'image vers la registry locale..."
-docker tag $IMAGE_NAME $REGISTRY_IMAGE_NAME
-docker push $REGISTRY_IMAGE_NAME
-
-if [ $? -eq 0 ]; then
-    log_success "Image poussée vers la registry locale avec succès"
-else
-    log_error "Échec du push de l'image vers la registry locale"
-    exit 1
-fi
-
-# Étape 3: Créer le namespace s'il n'existe pas
-log_info "Vérification du namespace '$NAMESPACE'..."
-if ! kubectl get namespace $NAMESPACE &> /dev/null; then
-    log_info "Création du namespace '$NAMESPACE'..."
-    kubectl create namespace $NAMESPACE
-    log_success "Namespace '$NAMESPACE' créé"
-else
-    log_info "Le namespace '$NAMESPACE' existe déjà"
-fi
-
-# Étape 4: Supprimer le déploiement existant s'il existe
-log_info "Vérification du déploiement existant..."
-if kubectl get deployment $APP_NAME -n $NAMESPACE &> /dev/null; then
-    log_warning "Suppression du déploiement existant..."
-    kubectl delete deployment $APP_NAME -n $NAMESPACE
-    kubectl delete service $APP_NAME -n $NAMESPACE 2>/dev/null || true
-    kubectl delete ingress $APP_NAME -n $NAMESPACE 2>/dev/null || true
-    log_success "Déploiement existant supprimé"
-fi
-
-# Étape 5: Déployer l'application
-log_info "Déploiement de l'application..."
-kubectl apply -f build/kubernetes/kind.yml
-
-if [ $? -eq 0 ]; then
-    log_success "Application déployée avec succès"
-else
-    log_error "Échec du déploiement de l'application"
-    exit 1
-fi
-
-# Étape 6: Attendre que le déploiement soit prêt
-log_info "Attente que le déploiement soit prêt..."
-kubectl wait --for=condition=available --timeout=300s deployment/$APP_NAME -n $NAMESPACE
-
-if [ $? -eq 0 ]; then
-    log_success "Déploiement prêt !"
-else
-    log_warning "Le déploiement prend plus de temps que prévu..."
-fi
-
-# Étape 7: Afficher l'état du déploiement
-log_info "État du déploiement :"
-kubectl get pods,services,ingress -n $NAMESPACE
-
-# Étape 8: Afficher les informations de connexion
-log_success "Déploiement terminé !"
-echo ""
-log_info "L'application est accessible via :"
-echo "  - HTTPS: https://quarkus-hello.127.0.0.1.nip.io"
-echo "  - HTTP:  http://quarkus-hello.127.0.0.1.nip.io"
-echo ""
-log_info "Commandes utiles :"
-echo "  - Logs: kubectl logs -f deployment/$APP_NAME -n $NAMESPACE"
-echo "  - Port-forward: kubectl port-forward svc/$APP_NAME 8080:80 -n $NAMESPACE"
-echo "  - Supprimer: kubectl delete -f build/kubernetes/kind.yml"
-echo ""
-log_info "Test des endpoints :"
-echo "  ./test-endpoints.sh"
+main "$@"

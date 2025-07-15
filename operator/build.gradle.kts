@@ -14,6 +14,10 @@ dependencies {
     implementation(libs.quarkus.operator.sdk)
     implementation(libs.quarkus.container.image.docker)
     
+    // TLS support for webhooks
+    implementation("io.quarkus:quarkus-vertx-http")
+    implementation("io.quarkus:quarkus-tls-registry")
+    
     // Kubernetes dependencies (using bundles)
     implementation(libs.bundles.kubernetes)
     

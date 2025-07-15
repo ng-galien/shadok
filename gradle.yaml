@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gradle-builddir-config
+data:
+  buildDir.gradle: |
+    gradle.allprojects { layout.buildDirectory.set(file("/build/output/${name}")) }

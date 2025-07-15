@@ -8,6 +8,7 @@ import io.javaoperatorsdk.webhook.admission.Operation;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
@@ -18,12 +19,15 @@ import org.shadok.operator.model.application.Application;
 import org.shadok.operator.model.application.ApplicationSpec;
 import org.shadok.operator.model.cache.DependencyCache;
 import org.shadok.operator.model.code.ProjectSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Path("/mutate-pods")
 @Consumes("application/json")
 @Produces("application/json")
 public class PodMutatingWebhook {
 
+  private static final Logger log = LoggerFactory.getLogger(PodMutatingWebhook.class);
   // 🔌 Fabric8 client injected by Quarkus/Spring runtime
   @Inject KubernetesClient client;
 
@@ -31,6 +35,7 @@ public class PodMutatingWebhook {
 
   @POST
   public AdmissionReview mutate(AdmissionReview req) {
+    log.info("🚀 Received Pod mutation request: {}", req.getRequest().getUid());
     return admissionController().handle(req);
   }
 
@@ -79,9 +84,10 @@ public class PodMutatingWebhook {
 
   // ADT to model different types of mutations
   public sealed interface PodMutation
-      permits PodMutation.AddVolume,
+      permits PodMutation.AddInitContainer,
+          PodMutation.AddVolume,
           PodMutation.AddVolumeMount,
-          PodMutation.AddInitContainer,
+          PodMutation.StartupProbe,
           PodMutation.TransformMainContainer {
 
     record AddVolume(String name, Volume volume) implements PodMutation {}
@@ -91,6 +97,8 @@ public class PodMutatingWebhook {
     record AddInitContainer(Container initContainer) implements PodMutation {}
 
     record TransformMainContainer(UnaryOperator<Container> transformation) implements PodMutation {}
+
+    record StartupProbe(String containerName) implements PodMutation {}
   }
 
   // Mutation context containing all necessary information
@@ -112,7 +120,7 @@ public class PodMutatingWebhook {
         Stream.of(
                 createVolumeMutations(projectSource, dependencyCache),
                 createInitContainerMutations(appSpec, projectSource),
-                createMainContainerMutations(applicationType))
+                createMainContainerMutations(appSpec, pod))
             .flatMap(List::stream)
             .toList();
 
@@ -131,6 +139,21 @@ public class PodMutatingWebhook {
       case PodMutation.AddInitContainer(var initContainer) -> addInitContainer(pod, initContainer);
       case PodMutation.TransformMainContainer(var transformation) ->
           transformMainContainer(pod, transformation);
+      case PodMutation.StartupProbe(var containerName) -> {
+        Consumer<Probe> increaseStartupProbeTimeout =
+            probe -> {
+              // Logic to increase startup probe timeout
+              probe.setInitialDelaySeconds(30);
+              probe.setPeriodSeconds(10);
+              probe.setFailureThreshold(50);
+            };
+        pod.getSpec().getContainers().stream()
+            .filter(container -> container.getName().equals(containerName))
+            .findFirst()
+            .map(Container::getStartupProbe)
+            .ifPresent(increaseStartupProbeTimeout);
+        yield pod;
+      }
     };
   }
 
@@ -138,6 +161,8 @@ public class PodMutatingWebhook {
   private List<PodMutation> createVolumeMutations(
       Optional<ProjectSource> projectSource, Optional<DependencyCache> dependencyCache) {
     return Stream.of(
+            Optional.of(createConfigGradleConfigMapVolumeMutation()),
+            projectSource.map(this::createTemporaryBuildVolumeMutation),
             projectSource.map(this::createProjectSourceVolumeMutation),
             dependencyCache.map(this::createDependencyCacheVolumeMutation))
         .filter(Optional::isPresent)
@@ -158,6 +183,15 @@ public class PodMutatingWebhook {
     return new PodMutation.AddVolume("project-source", volume);
   }
 
+  private PodMutation createTemporaryBuildVolumeMutation(ProjectSource projectSource) {
+    var volume =
+        new VolumeBuilder()
+            .withName("temporary-build")
+            .withEmptyDir(new EmptyDirVolumeSourceBuilder().build())
+            .build();
+    return new PodMutation.AddVolume("temporary-build", volume);
+  }
+
   private PodMutation createDependencyCacheVolumeMutation(DependencyCache dependencyCache) {
     var volume =
         new VolumeBuilder()
@@ -169,6 +203,23 @@ public class PodMutatingWebhook {
                     .build())
             .build();
     return new PodMutation.AddVolume("dependency-cache", volume);
+  }
+
+  private PodMutation createConfigGradleConfigMapVolumeMutation() {
+    var volume =
+        new VolumeBuilder()
+            .withName("init-scripts")
+            .withConfigMap(
+                new ConfigMapVolumeSourceBuilder()
+                    .withName("gradle-builddir-config")
+                    .withItems(
+                        new KeyToPathBuilder()
+                            .withKey("buildDir.gradle")
+                            .withPath("buildDir.gradle")
+                            .build())
+                    .build())
+            .build();
+    return new PodMutation.AddVolume("init-scripts", volume);
   }
 
   private List<PodMutation> createInitContainerMutations(
@@ -203,12 +254,58 @@ public class PodMutatingWebhook {
         });
   }
 
-  private List<PodMutation> createMainContainerMutations(ApplicationType applicationType) {
+  private List<PodMutation> createMainContainerMutations(ApplicationSpec appSpec, Pod pod) {
+    // Logic for finding the target container name based on ApplicationSpec
+    String targetContainerName = determineTargetContainerName(appSpec, pod);
+
     return List.of(
+        new PodMutation.StartupProbe(targetContainerName),
         new PodMutation.TransformMainContainer(
-            container -> transformForLiveReload(container, applicationType)),
-        new PodMutation.AddVolumeMount("app", createProjectSourceVolumeMount()),
-        new PodMutation.AddVolumeMount("app", createDependencyCacheVolumeMount()));
+            container -> transformForLiveReload(container, appSpec.applicationType())),
+        new PodMutation.AddVolumeMount(targetContainerName, createTemporaryBuildVolumeMount()),
+        new PodMutation.AddVolumeMount(targetContainerName, createProjectSourceVolumeMount()),
+        new PodMutation.AddVolumeMount(targetContainerName, createGradleIinitVolume()),
+        new PodMutation.AddVolumeMount(targetContainerName, createDependencyCacheVolumeMount()));
+  }
+
+  /**
+   * Determine the target container name based on ApplicationSpec configuration.
+   *
+   * @param appSpec Application specification containing optional containerName
+   * @param pod Pod being mutated
+   * @return Name of the target container
+   * @throws RuntimeException if container resolution fails
+   */
+  private String determineTargetContainerName(ApplicationSpec appSpec, Pod pod) {
+    List<Container> containers = pod.getSpec().getContainers();
+
+    if (appSpec.containerName() != null) {
+      // Container name is specified in ApplicationSpec - find it
+      return containers.stream()
+          .filter(container -> appSpec.containerName().equals(container.getName()))
+          .findFirst()
+          .map(Container::getName)
+          .orElseThrow(
+              () ->
+                  new RuntimeException(
+                      "Container '"
+                          + appSpec.containerName()
+                          + "' not found in pod. Available containers: "
+                          + containers.stream().map(Container::getName).toList()));
+    } else {
+      // No container name specified - use first container if there's exactly one
+      if (containers.isEmpty()) {
+        throw new RuntimeException("No containers found in pod");
+      } else if (containers.size() == 1) {
+        return containers.get(0).getName();
+      } else {
+        throw new RuntimeException(
+            "Multiple containers found but no containerName specified in ApplicationSpec. "
+                + "Available containers: "
+                + containers.stream().map(Container::getName).toList()
+                + ". Please specify containerName in the Application CRD.");
+      }
+    }
   }
 
   // Functions for applying mutations
@@ -324,16 +421,23 @@ public class PodMutatingWebhook {
                   new ContainerPortBuilder().withContainerPort(5005).withName("debug").build()));
       case QUARKUS_GRADLE ->
           new LiveReloadConfig(
-              List.of("./gradlew", "quarkusDev"),
+              List.of(
+                  "./gradlew",
+                  "-I",
+                  "/cache/init/buildDir.gradle",
+                  "--project-cache-dir",
+                  "/build/project/.gradle",
+                  "--info",
+                  "--no-daemon",
+                  "quarkusDev"),
               List.of(
                   new EnvVarBuilder()
                       .withName("GRADLE_USER_HOME")
                       .withValue("/cache/.gradle")
                       .build(),
                   new EnvVarBuilder()
-                      .withName("JAVA_TOOL_OPTIONS")
-                      .withValue(
-                          "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
+                      .withName("GRADLE_OPTS")
+                      .withValue("-Dorg.gradle.project.cache.dir=/build/.gradle")
                       .build()),
               List.of(
                   new ContainerPortBuilder().withContainerPort(5005).withName("debug").build()));
@@ -451,10 +555,26 @@ public class PodMutatingWebhook {
         .build();
   }
 
+  private VolumeMount createTemporaryBuildVolumeMount() {
+    return new VolumeMountBuilder()
+        .withName("temporary-build")
+        .withMountPath("/build")
+        .withReadOnly(false)
+        .build();
+  }
+
+  private VolumeMount createGradleIinitVolume() {
+    return new VolumeMountBuilder()
+        .withName("init-scripts")
+        .withMountPath("/cache/init")
+        .withReadOnly(false)
+        .build();
+  }
+
   private VolumeMount createDependencyCacheVolumeMount() {
     return new VolumeMountBuilder()
         .withName("dependency-cache")
-        .withMountPath("/cache/.m2")
+        .withMountPath("/cache")
         .withReadOnly(false)
         .build();
   }

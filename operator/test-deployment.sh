@@ -88,11 +88,11 @@ test_crds() {
 
 test_operator_deployment() {
     print_test "Déploiement de l'opérateur"
-    
+
     if kubectl get deployment operator -n "$NAMESPACE" > /dev/null 2>&1; then
         local ready=$(kubectl get deployment operator -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}')
         local desired=$(kubectl get deployment operator -n "$NAMESPACE" -o jsonpath='{.spec.replicas}')
-        
+
         if [ "$ready" = "$desired" ] && [ "$ready" != "" ]; then
             print_success "Déploiement opérateur prêt ($ready/$desired)"
             return 0
@@ -108,9 +108,9 @@ test_operator_deployment() {
 
 test_operator_pods() {
     print_test "Pods de l'opérateur"
-    
+
     local pods=$(kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/name=operator --field-selector=status.phase=Running --no-headers | wc -l)
-    
+
     if [ "$pods" -gt 0 ]; then
         print_success "$pods pod(s) opérateur en cours d'exécution"
         return 0
@@ -123,7 +123,7 @@ test_operator_pods() {
 
 test_operator_service() {
     print_test "Service de l'opérateur"
-    
+
     if kubectl get service operator -n "$NAMESPACE" > /dev/null 2>&1; then
         print_success "Service opérateur existe"
         return 0
@@ -147,7 +147,7 @@ test_webhook_configuration() {
 
 test_persistent_volumes() {
     print_test "Capacité de gestion des volumes persistants"
-    
+
     # L'opérateur n'a pas besoin de PVs pré-créés
     # Il crée les PVCs/PVs à la demande pour les applications via les CRDs
     if kubectl get storageclass > /dev/null 2>&1; then
@@ -161,15 +161,15 @@ test_persistent_volumes() {
 
 test_operator_health() {
     print_test "Santé de l'opérateur"
-    
+
     # Obtenir le nom du pod
     local pod=$(kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/name=operator -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-    
+
     if [ -z "$pod" ]; then
         print_error "Aucun pod opérateur trouvé"
         return 1
     fi
-    
+
     # Tester les endpoints de santé
     if kubectl exec -n "$NAMESPACE" "$pod" -- curl -f http://localhost:8080/q/health/live > /dev/null 2>&1; then
         print_success "Endpoint liveness accessible"
@@ -177,43 +177,43 @@ test_operator_health() {
         print_error "Endpoint liveness inaccessible"
         return 1
     fi
-    
+
     if kubectl exec -n "$NAMESPACE" "$pod" -- curl -f http://localhost:8080/q/health/ready > /dev/null 2>&1; then
         print_success "Endpoint readiness accessible"
     else
         print_error "Endpoint readiness inaccessible"
         return 1
     fi
-    
+
     return 0
 }
 
 test_rbac() {
     print_test "Configuration RBAC"
-    
+
     local failed=0
-    
+
     if kubectl get serviceaccount shadok -n "$NAMESPACE" > /dev/null 2>&1; then
         print_success "ServiceAccount existe"
     else
         print_error "ServiceAccount manquant"
         ((failed++))
     fi
-    
+
     if kubectl get clusterrole shadok-operator > /dev/null 2>&1; then
         print_success "ClusterRole existe"
     else
         print_error "ClusterRole manquant"
         ((failed++))
     fi
-    
+
     if kubectl get clusterrolebinding application-controller-cluster-role-binding > /dev/null 2>&1; then
         print_success "ClusterRoleBinding existe"
     else
         print_error "ClusterRoleBinding manquant"
         ((failed++))
     fi
-    
+
     return $failed
 }
 

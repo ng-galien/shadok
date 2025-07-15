@@ -54,7 +54,7 @@ public class ApplicationReconciler implements Reconciler<Application> {
     var name = application.getMetadata().getName();
     var namespace = application.getMetadata().getNamespace();
 
-    log.info("🧪 Test live reload à 17:06:00: {}/{}", namespace, name);
+    log.info("🚀 Reconciling Application {}/{} - checking dependencies", namespace, name);
 
     try {
       return reconcileLogic.apply(application);

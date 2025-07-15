@@ -52,6 +52,11 @@ spec:
                 - "VUE_NPM"
                 - "VUE_YARN"
                 type: "string"
+              containerName:
+                description: "Optional name of the main container to mutate. If not\
+                  \ specified, uses the first container or raises an error if multiple\
+                  \ containers exist"
+                type: "string"
               dependencyCacheName:
                 description: "Reference to the DependencyCache resource name"
                 type: "string"

@@ -16,7 +16,7 @@ metadata:
 spec:
   persistentVolumeName: pv-quarkus-hello-sources
   sourcePath: /
-  pvcName: quarkus-hello-source-pvc
+  pvcName: pvc-quarkus-hello-sources
   storageClass: local-storage
   storageSize: 1Gi
   accessMode: ReadOnlyMany

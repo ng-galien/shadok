@@ -1,0 +1,3 @@
+gradle.beforeProject {
+    layout.buildDirectory.set(file("/build/output/${name}"))
+}

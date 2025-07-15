@@ -1,7 +1,36 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+  namespace: shadok
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: webhook-server-cert
+  namespace: shadok
+spec:
+  secretName: webhook-tls
+  dnsNames:
+    - operator.shadok.svc
+    - operator.shadok.svc.cluster.local
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+  subject:                     # << ajoute un DN complet
+    organizations:
+      - shadok
+    countries:
+      - FR
+---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
   name: shadok-pod-mutator
+  annotations:
+    cert-manager.io/inject-ca-from: shadok/webhook-server-cert
 webhooks:
   - name: pod-mutator.shadok.org
     clientConfig:
@@ -9,6 +38,7 @@ webhooks:
         name: operator
         namespace: shadok
         path: "/mutate-pods"
+        port: 443
     rules:
       - operations: ["CREATE"]
         apiGroups: [""]
@@ -16,4 +46,11 @@ webhooks:
         resources: ["pods"]
     admissionReviewVersions: ["v1", "v1beta1"]
     sideEffects: None
-    failurePolicy: Ignore
+    failurePolicy: Fail
+    namespaceSelector: {}
+    objectSelector:
+      matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: NotIn
+        values: ["operator"]
+    timeoutSeconds: 10

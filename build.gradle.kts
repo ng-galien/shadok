@@ -66,6 +66,10 @@ subprojects {
         java {
             googleJavaFormat(libs.versions.google.java.format.get())
             removeUnusedImports()
+            indentWithSpaces(4)
+            trimTrailingWhitespace()
+            endWithNewline()
+
             target("src/**/*.java")
         }
         
