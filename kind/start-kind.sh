@@ -368,6 +368,45 @@ EOF
     log_success "✅ PersistentVolumes created for pod sources"
 }
 
+# Create cache volume for dependencies
+create_cache_volume() {
+    log_info "💾 Creating cache volume for dependencies..."
+
+    # Create directory for the cache volume
+    docker exec "${CLUSTER_NAME}-control-plane" mkdir -p /tmp/shadok-application-cache
+    docker exec "${CLUSTER_NAME}-control-plane" chmod 777 /tmp/shadok-application-cache
+
+    kubectl apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-shadok-cache
+  labels:
+    app: shadok
+    type: cache
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /tmp/shadok-application-cache
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - ${CLUSTER_NAME}-control-plane
+EOF
+
+    log_success "✅ Cache volume created"
+}
+
 # Display final information
 show_cluster_info() {
     log_success "🎉 === Kind cluster '${CLUSTER_NAME}' ready! ==="
@@ -396,10 +435,14 @@ show_cluster_info() {
     echo "  - kubectl get pv -l app=shadok"
     echo "  - kubectl get pvc -l app=shadok"
     echo ""
+    log_info "🗄️ Cache volume:"
+    echo "  - PV: pv-shadok-cache"
+    echo ""
     log_info "🧹 To clean up:"
     echo "  - kind delete cluster --name ${CLUSTER_NAME}"
     echo "  - docker rm -f ${REGISTRY_NAME}"
     echo "  - rm -rf ~/.shadok/registry-data  # Remove image cache"
+    echo "  - rm -rf /tmp/shadok-cache  # Remove dependency cache"
     echo ""
 
     # Display node status
@@ -428,6 +471,7 @@ main() {
     install_controllers
     install_cert_manager
     create_pod_persistent_volumes
+    create_cache_volume
 
     # Advanced cluster configuration
     log_info "🔧 Launching advanced configuration..."
