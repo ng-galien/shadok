@@ -320,67 +320,6 @@ EOF
     print_success "Namespace '$NAMESPACE' créé"
 }
 
-deploy_persistent_volumes() {
-    print_header "Déploiement des Volumes Persistants"
-    
-    print_step "Création des répertoires sur le nœud Kind..."
-    
-    # Créer les répertoires dans le conteneur Kind
-    docker exec "${CLUSTER_NAME}-control-plane" mkdir -p /tmp/shadok-sources /tmp/shadok-java-cache
-    docker exec "${CLUSTER_NAME}-control-plane" chmod 777 /tmp/shadok-sources /tmp/shadok-java-cache
-    
-    print_step "Déploiement des PersistentVolumes..."
-    
-    # PV pour les sources
-    cat << EOF | kubectl apply -f -
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: pv-shadok-sources
-spec:
-  capacity:
-    storage: 5Gi
-  accessModes:
-    - ReadWriteMany
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
-  local:
-    path: /tmp/shadok-sources
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-      - matchExpressions:
-        - key: kubernetes.io/hostname
-          operator: In
-          values:
-          - ${CLUSTER_NAME}-control-plane
----
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: pv-java-cache
-spec:
-  capacity:
-    storage: 10Gi
-  accessModes:
-    - ReadWriteMany
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
-  local:
-    path: /tmp/shadok-java-cache
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-      - matchExpressions:
-        - key: kubernetes.io/hostname
-          operator: In
-          values:
-          - ${CLUSTER_NAME}-control-plane
-EOF
-    
-    print_success "PersistentVolumes déployés"
-}
-
 deploy_crds() {
     print_header "Déploiement des Custom Resource Definitions"
     
@@ -810,7 +749,6 @@ main() {
     setup_local_registry
     setup_ingress_controller
     create_namespace
-    deploy_persistent_volumes
     build_operator_image
     deploy_crds
     deploy_rbac

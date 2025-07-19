@@ -3,13 +3,13 @@ package org.shadok.operator.controller;
 import static io.javaoperatorsdk.operator.api.reconciler.UpdateControl.noUpdate;
 import static io.javaoperatorsdk.operator.api.reconciler.UpdateControl.patchStatus;
 
+import io.fabric8.kubernetes.api.model.Namespaced;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
-import jakarta.inject.Inject;
 import java.time.Duration;
 import org.shadok.operator.dependent.ProjectSourcePvcDependent;
 import org.shadok.operator.model.code.ProjectSource;
@@ -25,11 +25,9 @@ import org.slf4j.LoggerFactory;
  */
 @ControllerConfiguration(name = "project-source-controller")
 @Workflow(dependents = {@Dependent(type = ProjectSourcePvcDependent.class)})
-public class ProjectSourceReconciler implements Reconciler<ProjectSource> {
+public class ProjectSourceReconciler implements Reconciler<ProjectSource>, Namespaced {
 
   private static final Logger log = LoggerFactory.getLogger(ProjectSourceReconciler.class);
-
-  @Inject ProjectSourcePvcDependent pvcDependent;
 
   @Override
   public UpdateControl<ProjectSource> reconcile(

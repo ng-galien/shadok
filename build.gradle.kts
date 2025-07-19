@@ -13,7 +13,7 @@ dependencies {
     // Import external BOMs
     api(platform(libs.quarkus.bom))
     api(platform(libs.quarkus.operator.sdk.bom))
-    
+
     constraints {
         // Additional dependencies
         api(libs.kubernetes.webhooks.core)
@@ -35,19 +35,17 @@ configure<com.diffplug.gradle.spotless.SpotlessExtension> {
 
 // Subprojects configuration
 subprojects {
-    apply(plugin = "java")
-    apply(plugin = "java-library")
     apply(plugin = "com.diffplug.spotless")
-    
+
     group = findProperty("group") as String
     version = findProperty("version") as String
     
-    configure<JavaPluginExtension> {
-        toolchain {
-            languageVersion.set(JavaLanguageVersion.of(21))
-        }
-        withSourcesJar()
-    }
+//    configure<JavaPluginExtension> {
+//        toolchain {
+//            languageVersion.set(JavaLanguageVersion.of(21))
+//        }
+//        withSourcesJar()
+//    }
     
     // Common repositories
     repositories {
@@ -122,6 +120,24 @@ subprojects {
     }
 }
 
+val envProfile: String = (findProperty("env") as String?) ?: "prod"
+
+project(":operator") {
+    group = "io.shadok"
+    description = "Shadok Kubernetes Live Development Operator"
+    extra["chartName"] = "shadok-operator"
+    extra["chartVersion"] = "1.0.0"
+    extra["chartDescription"] = "Chart for Shadok Kubernetes Live Development Operator"
+    extra["imageName"] = "shadok-operator"
+    extra["imageRegistry"] = when (envProfile) {
+        "kind" -> "localhost:5001"
+        else   -> "docker.io"
+    }
+    extra["imageTag"] = when (envProfile) {
+        "kind" -> "latest"
+        else   -> project.version.toString()
+    }
+}
 // =========================
 // Python Pods Management
 // =========================

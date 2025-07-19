@@ -3,13 +3,13 @@ package org.shadok.operator.controller;
 import static io.javaoperatorsdk.operator.api.reconciler.UpdateControl.noUpdate;
 import static io.javaoperatorsdk.operator.api.reconciler.UpdateControl.patchStatus;
 
+import io.fabric8.kubernetes.api.model.Namespaced;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.Workflow;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.Dependent;
-import jakarta.inject.Inject;
 import java.time.Duration;
 import org.shadok.operator.dependent.DependencyCachePvcDependent;
 import org.shadok.operator.model.cache.DependencyCache;
@@ -25,11 +25,9 @@ import org.slf4j.LoggerFactory;
  */
 @ControllerConfiguration(name = "dependency-cache-controller")
 @Workflow(dependents = {@Dependent(type = DependencyCachePvcDependent.class)})
-public class DependencyCacheReconciler implements Reconciler<DependencyCache> {
+public class DependencyCacheReconciler implements Reconciler<DependencyCache>, Namespaced {
 
   private static final Logger log = LoggerFactory.getLogger(DependencyCacheReconciler.class);
-
-  @Inject DependencyCachePvcDependent pvcDependent;
 
   @Override
   public UpdateControl<DependencyCache> reconcile(

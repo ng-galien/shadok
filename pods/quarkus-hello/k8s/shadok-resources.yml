@@ -33,17 +33,4 @@ spec:
   storageClass: local-storage
   storageSize: 10Gi
   accessMode: ReadWriteMany
----
-apiVersion: shadok.org/v1
-kind: Application
-metadata:
-  name: test-app
-  namespace: shadok
-spec:
-  applicationType: QUARKUS_GRADLE
-  projectSourceName: "quarkus-hello-source"
-  dependencyCacheName: "java-cache"
-  initContainerMounts: []
-  labels:
-    app: "test-application"
-    version: "1.0"
+

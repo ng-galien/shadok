@@ -3,6 +3,7 @@ package org.shadok.operator.controller;
 import static io.javaoperatorsdk.operator.api.reconciler.UpdateControl.patchStatus;
 import static java.util.Optional.ofNullable;
 
+import io.fabric8.kubernetes.api.model.Namespaced;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -32,7 +33,7 @@ import org.slf4j.LoggerFactory;
  * resources exist and are in a ready state.
  */
 @ControllerConfiguration(name = "application-controller")
-public class ApplicationReconciler implements Reconciler<Application> {
+public class ApplicationReconciler implements Reconciler<Application>, Namespaced {
 
   private static final Logger log = LoggerFactory.getLogger(ApplicationReconciler.class);
 
