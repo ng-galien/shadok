@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script idempotent pour démarrer kind avec registry mirror GitHub
+# Idempotent script to start kind with GitHub registry mirror
 # Usage: ./start-kind.sh [cluster-name]
 
 set -euo pipefail
@@ -9,19 +9,18 @@ set -euo pipefail
 CLUSTER_NAME="${1:-shadok-dev}"
 REGISTRY_NAME="shadok-registry"
 REGISTRY_PORT="5001"
-GITHUB_REGISTRY="ghcr.io"
 
-# Chemin vers le répertoire des pods (relatif au script)
+# Path to the pods directory (relative to the script)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PODS_DIR="$(dirname "${SCRIPT_DIR}")/pods"
 
-# Validation du répertoire pods
+# Validation of the pods directory
 if [ ! -d "${PODS_DIR}" ]; then
-    echo "❌ Erreur: Répertoire pods non trouvé: ${PODS_DIR}"
+    echo "❌ Error: Pods directory not found: ${PODS_DIR}"
     exit 1
 fi
 
-# Couleurs pour les logs
+# Colors for logs
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -44,57 +43,57 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Vérifier les prérequis
+# Check prerequisites
 check_prerequisites() {
-    log_info "🔍 Vérification des prérequis..."
+    log_info "🔍 Checking prerequisites..."
 
     if ! command -v kind &> /dev/null; then
-        log_error "❌ kind n'est pas installé. Installez-le avec: brew install kind"
+        log_error "❌ kind is not installed. Install it with: brew install kind"
         exit 1
     fi
 
     if ! command -v docker &> /dev/null; then
-        log_error "❌ docker n'est pas installé"
+        log_error "❌ docker is not installed"
         exit 1
     fi
 
     if ! docker info &> /dev/null; then
-        log_error "❌ Docker n'est pas démarré"
+        log_error "❌ Docker is not running"
         exit 1
     fi
 
-    log_success "✅ Prérequis vérifiés"
+    log_success "✅ Prerequisites verified"
 }
 
-# Nettoyer le cluster existant si nécessaire
+# Clean up existing cluster if necessary
 cleanup_existing_cluster() {
     if kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
-        log_warning "⚠️  Cluster kind '${CLUSTER_NAME}' existant détecté"
-        log_info "🗑️  Suppression du cluster existant..."
+        log_warning "⚠️  Existing kind cluster '${CLUSTER_NAME}' detected"
+        log_info "🗑️  Deleting existing cluster..."
         kind delete cluster --name "${CLUSTER_NAME}"
-        log_success "🧹 Cluster existant supprimé"
+        log_success "🧹 Existing cluster deleted"
     fi
 }
 
-# Nettoyer la registry existante si nécessaire (préserver les données)
+# Clean up existing registry if necessary (preserve data)
 cleanup_existing_registry() {
     if docker ps -a --format '{{.Names}}' | grep -q "^${REGISTRY_NAME}$"; then
-        log_warning "⚠️  Registry '${REGISTRY_NAME}' existante détectée"
+        log_warning "⚠️  Existing registry '${REGISTRY_NAME}' detected"
         if docker ps --format '{{.Names}}' | grep -q "^${REGISTRY_NAME}$"; then
-            log_info "⏹️  Arrêt de la registry existante..."
+            log_info "⏹️  Stopping existing registry..."
             docker stop "${REGISTRY_NAME}" || true
         fi
-        log_info "🗑️  Suppression du conteneur (données préservées)..."
+        log_info "🗑️  Removing container (data preserved)..."
         docker rm "${REGISTRY_NAME}" || true
-        log_success "🧹 Conteneur registry supprimé (données conservées)"
+        log_success "🧹 Registry container removed (data preserved)"
     fi
 }
 
-# Créer la registry locale
+# Create the local registry
 create_local_registry() {
-    log_info "🐳 Création de la registry locale..."
+    log_info "🐳 Creating local registry..."
 
-    # Créer le répertoire pour le volume persistant de la registry
+    # Create directory for the registry persistent volume
     local registry_volume_dir="${HOME}/.shadok/registry-data"
     mkdir -p "${registry_volume_dir}"
 
@@ -105,20 +104,20 @@ create_local_registry() {
         -v "${registry_volume_dir}:/var/lib/registry" \
         registry:2
 
-    log_success "📦 Registry locale créée sur le port ${REGISTRY_PORT}"
-    log_info "💾 Volume persistant: ${registry_volume_dir}"
+    log_success "📦 Local registry created on port ${REGISTRY_PORT}"
+    log_info "💾 Persistent volume: ${registry_volume_dir}"
 }
 
-# Créer la configuration kind
+# Create the kind configuration
 create_kind_config() {
-    log_info "⚙️  Création de la configuration kind..."
+    log_info "⚙️  Creating kind configuration..."
 
-    # Découvrir automatiquement les pods disponibles
+    # Automatically discover available pods
     local pods_mounts=""
     for pod_dir in "${PODS_DIR}"/*/; do
         if [ -d "$pod_dir" ]; then
             local pod_name=$(basename "$pod_dir")
-            # Ignorer les répertoires build et node_modules
+            # Ignore build and node_modules directories
             if [[ "$pod_name" != "build" && "$pod_name" != "node_modules" ]]; then
                 pods_mounts="${pods_mounts}  - hostPath: ${pod_dir}
     containerPath: /pods/${pod_name}
@@ -128,7 +127,7 @@ create_kind_config() {
         fi
     done
 
-    log_info "📁 Montage des répertoires pods détectés :"
+    log_info "📁 Mounting detected pod directories:"
     echo "${pods_mounts}" | grep "hostPath:" | sed 's/.*hostPath: /  - /'
 
     cat > /tmp/kind-config.yaml <<EOF
@@ -157,44 +156,44 @@ containerdConfigPatches:
   [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
     [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:${REGISTRY_PORT}"]
       endpoint = ["http://${REGISTRY_NAME}:5000"]
-    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."${GITHUB_REGISTRY}"]
-      endpoint = ["https://${GITHUB_REGISTRY}"]
+    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+      endpoint = ["http://${REGISTRY_NAME}:5000"]
 EOF
 
-    log_success "📝 Configuration kind créée"
+    log_success "📝 Kind configuration created"
 }
 
-# Créer le cluster kind
+# Create the kind cluster
 create_kind_cluster() {
-    log_info "🚀 Création du cluster kind '${CLUSTER_NAME}'..."
+    log_info "🚀 Creating kind cluster '${CLUSTER_NAME}'..."
 
     kind create cluster --config /tmp/kind-config.yaml
 
-    log_success "🎯 Cluster kind '${CLUSTER_NAME}' créé"
+    log_success "🎯 Kind cluster '${CLUSTER_NAME}' created"
 }
 
-# Connecter la registry au cluster
+# Connect the registry to the cluster
 connect_registry_to_cluster() {
-    log_info "🔗 Connexion de la registry au cluster..."
+    log_info "🔗 Connecting registry to the cluster..."
 
-    # Attendre que le cluster soit complètement initialisé
+    # Wait for the cluster to be fully initialized
     sleep 3
 
-    # Vérifier si le réseau kind existe
+    # Check if the kind network exists
     if ! docker network ls | grep -q "kind"; then
-        log_warning "⚠️  Réseau kind non trouvé, tentative de création..."
-        # Le réseau devrait normalement être créé par kind, mais on peut le créer manuellement si besoin
-        docker network create kind --driver bridge || log_warning "Le réseau kind existe peut-être déjà"
+        log_warning "⚠️  Kind network not found, attempting to create..."
+        # The network should normally be created by kind, but we can create it manually if needed
+        docker network create kind --driver bridge || log_warning "Kind network may already exist"
     fi
 
-    # Connecter la registry au réseau kind
+    # Connect the registry to the kind network
     if docker network connect "kind" "${REGISTRY_NAME}" 2>/dev/null; then
-        log_success "🔗 Registry connectée au réseau kind"
+        log_success "🔗 Registry connected to kind network"
     else
-        log_warning "⚠️  Registry déjà connectée au réseau kind"
+        log_warning "⚠️  Registry already connected to kind network"
     fi
 
-    # Documenter la registry locale dans le cluster
+    # Document the local registry in the cluster
     kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
@@ -207,88 +206,88 @@ data:
     help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
 EOF
 
-    log_success "🎪 Registry connectée au cluster"
+    log_success "🎪 Registry connected to cluster"
 }
 
-# Installer les contrôleurs essentiels
+# Install essential controllers
 install_controllers() {
-    log_info "🛠️  Installation des contrôleurs essentiels..."
+    log_info "🛠️  Installing essential controllers..."
 
-    # Installer NGINX Ingress Controller
+    # Install NGINX Ingress Controller
     kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 
-    # Attendre que l'ingress controller soit prêt
-    log_info "⏳ Attente du démarrage de l'ingress controller..."
+    # Wait for the ingress controller to be ready
+    log_info "⏳ Waiting for ingress controller to start..."
 
-    # D'abord attendre que le job d'admission patch soit terminé
+    # First wait for the admission patch job to complete
     kubectl wait --namespace ingress-nginx \
         --for=condition=complete job/ingress-nginx-admission-patch \
         --timeout=90s
 
-    # Puis attendre que les pods du contrôleur soient prêts
+    # Then wait for the controller pods to be ready
     kubectl wait --namespace ingress-nginx \
         --for=condition=ready pod \
         --selector=app.kubernetes.io/component=controller \
         --timeout=90s
 
-    # Patcher la ConfigMap pour activer les snippets
-    log_info "🔧 Activation des snippets pour ingress-nginx..."
+    # Patch the ConfigMap to enable snippets
+    log_info "🔧 Enabling snippets for ingress-nginx..."
     kubectl patch configmap ingress-nginx-controller -n ingress-nginx \
         --patch '{"data":{"allow-snippet-annotations":"true","annotations-risk-level":"Critical"}}'
 
-    # Redémarrer le contrôleur pour appliquer les changements
-    log_info "🔄 Redémarrage du contrôleur ingress-nginx..."
+    # Restart the controller to apply changes
+    log_info "🔄 Restarting ingress-nginx controller..."
     kubectl rollout restart deployment/ingress-nginx-controller -n ingress-nginx
 
-    # Attendre que le redémarrage soit terminé
-    log_info "⏳ Attente que le contrôleur redémarre..."
+    # Wait for the restart to complete
+    log_info "⏳ Waiting for controller to restart..."
     kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=90s
 
-    log_success "🌐 Contrôleurs installés avec snippets activés"
+    log_success "🌐 Controllers installed with snippets enabled"
 }
 
-# Installer cert-manager
+# Install cert-manager
 install_cert_manager() {
-    log_info "🔒 Installation de cert-manager..."
+    log_info "🔒 Installing cert-manager..."
 
-    # Vérifier si cert-manager est déjà installé
+    # Check if cert-manager is already installed
     if kubectl get namespace cert-manager > /dev/null 2>&1; then
-        log_warning "⚠️  cert-manager semble déjà installé, nettoyage en cours..."
+        log_warning "⚠️  cert-manager seems to be already installed, cleaning up..."
 
-        # Supprimer les ressources existantes de cert-manager
+        # Delete existing cert-manager resources
         kubectl delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.1/cert-manager.yaml --ignore-not-found=true || true
 
-        # Supprimer le namespace cert-manager et attendre qu'il soit complètement supprimé
+        # Delete the cert-manager namespace and wait for it to be completely removed
         kubectl delete namespace cert-manager --wait=true || true
 
-        # Attendre que le namespace soit complètement supprimé
-        log_info "⏳ Attente de la suppression complète du namespace cert-manager..."
+        # Wait for the namespace to be completely removed
+        log_info "⏳ Waiting for complete removal of cert-manager namespace..."
         while kubectl get namespace cert-manager > /dev/null 2>&1; do
-            log_info "  Attente..."
+            log_info "  Waiting..."
             sleep 5
         done
 
-        log_success "🧹 Ancien cert-manager nettoyé"
+        log_success "🧹 Old cert-manager cleaned up"
     fi
 
-    # Créer le namespace cert-manager
+    # Create the cert-manager namespace
     kubectl create namespace cert-manager
 
-    # Installer cert-manager avec Helm
-    log_info "📦 Installation de cert-manager avec Helm..."
+    # Install cert-manager with Helm
+    log_info "📦 Installing cert-manager with Helm..."
 
-    # Vérifier si Helm est installé
+    # Check if Helm is installed
     if ! command -v helm > /dev/null 2>&1; then
-        log_error "❌ Helm n'est pas installé. Installation de cert-manager avec kubectl..."
+        log_error "❌ Helm is not installed. Installing cert-manager with kubectl..."
 
-        # Installer cert-manager avec kubectl comme fallback
+        # Install cert-manager with kubectl as fallback
         kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.1/cert-manager.yaml
     else
-        # Ajouter le repo Helm de cert-manager
+        # Add the cert-manager Helm repo
         helm repo add jetstack https://charts.jetstack.io
         helm repo update
 
-        # Installer cert-manager avec Helm
+        # Install cert-manager with Helm
         helm install \
             cert-manager jetstack/cert-manager \
             --namespace cert-manager \
@@ -297,28 +296,28 @@ install_cert_manager() {
             --set installCRDs=true
     fi
 
-    # Attendre que cert-manager soit prêt
-    log_info "⏳ Attente du démarrage de cert-manager..."
+    # Wait for cert-manager to be ready
+    log_info "⏳ Waiting for cert-manager to start..."
     kubectl wait --namespace cert-manager \
         --for=condition=ready pod \
         --selector=app.kubernetes.io/instance=cert-manager \
         --timeout=120s
 
-    log_success "🔒 cert-manager installé avec succès"
+    log_success "🔒 cert-manager successfully installed"
 }
 
-# Créer les PersistentVolumes pour les pods sources
+# Create PersistentVolumes for pod sources
 create_pod_persistent_volumes() {
-    log_info "💾 Création des PersistentVolumes pour les sources pods..."
+    log_info "💾 Creating PersistentVolumes for pod sources..."
 
     for pod_dir in "${PODS_DIR}"/*/; do
         if [ -d "$pod_dir" ]; then
             local pod_name=$(basename "$pod_dir")
-            # Ignorer les répertoires build et node_modules
+            # Ignore build and node_modules directories
             if [[ "$pod_name" != "build" && "$pod_name" != "node_modules" ]]; then
-                log_info "📁 Création du PV pour ${pod_name}..."
+                log_info "📁 Creating PV for ${pod_name}..."
 
-                # Créer d'abord le namespace shadok s'il n'existe pas
+                # First create the shadok namespace if it doesn't exist
                 kubectl create namespace shadok --dry-run=client -o yaml | kubectl apply -f -
 
                 kubectl apply -f - <<EOF
@@ -366,19 +365,18 @@ EOF
         fi
     done
 
-    log_success "✅ PersistentVolumes créés pour les sources pods"
+    log_success "✅ PersistentVolumes created for pod sources"
 }
 
-# Afficher les informations finales
+# Display final information
 show_cluster_info() {
-    log_success "🎉 === Cluster kind '${CLUSTER_NAME}' prêt ! ==="
+    log_success "🎉 === Kind cluster '${CLUSTER_NAME}' ready! ==="
     echo ""
     log_info "🔧 Configuration:"
     echo "  - 🏷️  Cluster: ${CLUSTER_NAME}"
-    echo "  - 📦 Registry locale: localhost:${REGISTRY_PORT}"
-    echo "  - 🐙 GitHub registry mirror: ${GITHUB_REGISTRY}"
+    echo "  - 📦 Local registry: localhost:${REGISTRY_PORT} (mirrors docker.io)"
     echo ""
-    log_info "� Pods sources montés (readonly):"
+    log_info "� Pod sources mounted (readonly):"
     for pod_dir in "${PODS_DIR}"/*/; do
         if [ -d "$pod_dir" ]; then
             local pod_name=$(basename "$pod_dir")
@@ -388,46 +386,42 @@ show_cluster_info() {
         fi
     done
     echo ""
-    log_info "�📋 Commandes utiles:"
+    log_info "�📋 Useful commands:"
     echo "  - kubectl cluster-info"
     echo "  - kubectl get nodes"
     echo "  - kubectl get pv,pvc"
-    echo "  - docker push localhost:${REGISTRY_PORT}/mon-image:tag"
+    echo "  - docker push localhost:${REGISTRY_PORT}/my-image:tag"
     echo ""
     log_info "💾 PersistentVolumes:"
     echo "  - kubectl get pv -l app=shadok"
     echo "  - kubectl get pvc -l app=shadok"
     echo ""
-    log_info "🧹 Pour nettoyer:"
+    log_info "🧹 To clean up:"
     echo "  - kind delete cluster --name ${CLUSTER_NAME}"
     echo "  - docker rm -f ${REGISTRY_NAME}"
-    echo "  - rm -rf ~/.shadok/registry-data  # Supprimer le cache des images"
+    echo "  - rm -rf ~/.shadok/registry-data  # Remove image cache"
     echo ""
 
-    # Afficher l'état des nodes
+    # Display node status
     kubectl get nodes -o wide
     echo ""
 
-    # Afficher l'état des PV/PVC
-    log_info "📊 État des PersistentVolumes:"
-    kubectl get pv -l app=shadok 2>/dev/null || log_warning "Aucun PV shadok trouvé"
+    # Display PV/PVC status
+    log_info "📊 PersistentVolumes status:"
+    kubectl get pv -l app=shadok 2>/dev/null || log_warning "No shadok PV found"
     echo ""
-    kubectl get pvc -l app=shadok 2>/dev/null || log_warning "Aucun PVC shadok trouvé"
+    kubectl get pvc -l app=shadok 2>/dev/null || log_warning "No shadok PVC found"
 }
 
-# Fonction principale
+# Main function
 main() {
-    log_info "🚀 === Démarrage de kind avec registry mirror GitHub ==="
+    log_info "🚀 === Starting kind with GitHub and Docker Hub registry mirrors ==="
     echo ""
 
     check_prerequisites
     cleanup_existing_cluster
     cleanup_existing_registry
     create_local_registry
-
-    # Attendre que la registry soit prête
-    sleep 2
-
     create_kind_config
     create_kind_cluster
     connect_registry_to_cluster
@@ -435,20 +429,20 @@ main() {
     install_cert_manager
     create_pod_persistent_volumes
 
-    # Configuration avancée du cluster
-    log_info "🔧 Lancement de la configuration avancée..."
+    # Advanced cluster configuration
+    log_info "🔧 Launching advanced configuration..."
     if [ -x "./kind-config.sh" ]; then
         ./kind-config.sh "${CLUSTER_NAME}"
     else
-        log_warning "⚠️  Script kind-config.sh non trouvé ou non exécutable"
-        log_info "   Lancez manuellement: ./kind-config.sh ${CLUSTER_NAME}"
+        log_warning "⚠️  Script kind-config.sh not found or not executable"
+        log_info "   Run manually: ./kind-config.sh ${CLUSTER_NAME}"
     fi
 
-    # Nettoyer le fichier de config temporaire
+    # Clean up temporary config file
     rm -f /tmp/kind-config.yaml
 
     show_cluster_info
 }
 
-# Exécuter le script principal
+# Execute the main script
 main "$@"
