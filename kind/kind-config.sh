@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Script de configuration avancée pour kind
-# Déploie cert-manager, ingress-nginx avec snippets, dashboard et pod curl
+# Advanced configuration script for kind
+# Deploys cert-manager, ingress-nginx with snippets, dashboard and curl pod
 # Usage: ./kind-config.sh [cluster-name]
 
 set -euo pipefail
@@ -10,7 +10,7 @@ set -euo pipefail
 CLUSTER_NAME="${1:-shadok-dev}"
 DASHBOARD_VERSION="v2.7.0"
 
-# Couleurs pour les logs
+# Colors for logs
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -33,105 +33,105 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Vérifier les prérequis
+# Check prerequisites
 check_prerequisites() {
-    log_info "🔍 Vérification des prérequis..."
-    
+    log_info "🔍 Checking prerequisites..."
+
     if ! command -v kubectl &> /dev/null; then
-        log_error "❌ kubectl n'est pas installé"
+        log_error "❌ kubectl is not installed"
         exit 1
     fi
-    
+
     if ! command -v helm &> /dev/null; then
-        log_error "❌ helm n'est pas installé. Installez-le avec: brew install helm"
+        log_error "❌ helm is not installed. Install it with: brew install helm"
         exit 1
     fi
-    
-    # Vérifier la connexion au cluster
+
+    # Check connection to the cluster
     if ! kubectl cluster-info --context "kind-${CLUSTER_NAME}" &> /dev/null; then
-        log_error "❌ Impossible de se connecter au cluster kind-${CLUSTER_NAME}"
-        log_error "   Assurez-vous que le cluster est démarré avec ./start-kind.sh"
+        log_error "❌ Unable to connect to cluster kind-${CLUSTER_NAME}"
+        log_error "   Make sure the cluster is started with ./start-kind.sh"
         exit 1
     fi
-    
-    log_success "✅ Prérequis vérifiés"
+
+    log_success "✅ Prerequisites verified"
 }
 
-# Ajouter les repositories Helm
+# Add Helm repositories
 add_helm_repos() {
-    log_info "📦 Ajout des repositories Helm..."
-    
+    log_info "📦 Adding Helm repositories..."
+
     # Cert-manager
     helm repo add jetstack https://charts.jetstack.io --force-update
-    
+
     # Ingress-nginx
     helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update
-    
+
     # Kubernetes Dashboard
     helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/ --force-update
-    
-    # Mettre à jour les repos
+
+    # Update repositories
     helm repo update
-    
-    log_success "📚 Repositories Helm ajoutés et mis à jour"
+
+    log_success "📚 Helm repositories added and updated"
 }
 
-# Installer cert-manager
+# Install cert-manager
 install_cert_manager() {
-    log_info "🔐 Installation de cert-manager..."
-    
-    # Créer le namespace
+    log_info "🔐 Installing cert-manager..."
+
+    # Create the namespace
     kubectl create namespace cert-manager --dry-run=client -o yaml | kubectl apply -f -
-    
-    # Installer cert-manager avec Helm
+
+    # Install cert-manager with Helm
     helm upgrade --install cert-manager jetstack/cert-manager \
         --namespace cert-manager \
         --version v1.13.2 \
         --set installCRDs=true \
         --set global.leaderElection.namespace=cert-manager \
         --wait --timeout=300s
-    
-    # Attendre que cert-manager soit prêt
-    log_info "⏳ Attente que cert-manager soit prêt..."
+
+    # Wait for cert-manager to be ready
+    log_info "⏳ Waiting for cert-manager to be ready..."
     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cert-manager \
         -n cert-manager --timeout=300s
-    
-    log_success "🔒 cert-manager installé et opérationnel"
+
+    log_success "🔒 cert-manager installed and operational"
 }
 
-# Vérifier ingress-nginx et s'assurer que les snippets sont activés
+# Verify ingress-nginx and ensure snippets are enabled
 verify_ingress_nginx() {
-    log_info "🌐 Vérification d'ingress-nginx..."
-    
-    # Vérifier si ingress-nginx est installé et opérationnel
+    log_info "🌐 Verifying ingress-nginx..."
+
+    # Check if ingress-nginx is installed and operational
     if ! kubectl get namespace ingress-nginx &> /dev/null; then
-        log_error "❌ Namespace ingress-nginx non trouvé"
-        log_error "   Assurez-vous que start-kind.sh a été exécuté avec succès"
+        log_error "❌ Namespace ingress-nginx not found"
+        log_error "   Make sure start-kind.sh has been executed successfully"
         exit 1
     fi
-    
+
     if ! kubectl get pods -n ingress-nginx -l app.kubernetes.io/component=controller --no-headers | grep -q "Running"; then
-        log_error "❌ Contrôleur ingress-nginx non opérationnel"
-        log_error "   Assurez-vous que start-kind.sh a été exécuté avec succès"
+        log_error "❌ ingress-nginx controller not operational"
+        log_error "   Make sure start-kind.sh has been executed successfully"
         exit 1
     fi
-    
-    # Vérifier que les snippets sont activés
+
+    # Check that snippets are enabled
     if kubectl get configmap ingress-nginx-controller -n ingress-nginx -o jsonpath='{.data.allow-snippet-annotations}' | grep -q "true"; then
-        log_success "✅ ingress-nginx opérationnel avec snippets activés"
+        log_success "✅ ingress-nginx operational with snippets enabled"
     else
-        log_warning "⚠️  Les snippets ne semblent pas activés dans ingress-nginx"
+        log_warning "⚠️  Snippets do not appear to be enabled in ingress-nginx"
     fi
 }
 
-# Installer le Kubernetes Dashboard
+# Install the Kubernetes Dashboard
 install_dashboard() {
-    log_info "📊 Installation du Kubernetes Dashboard..."
-    
-    # Créer le namespace
+    log_info "📊 Installing Kubernetes Dashboard..."
+
+    # Create the namespace
     kubectl create namespace kubernetes-dashboard --dry-run=client -o yaml | kubectl apply -f -
-    
-    # Installer le dashboard avec Helm
+
+    # Install the dashboard with Helm
     helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard \
         --namespace kubernetes-dashboard \
         --set app.ingress.enabled=false \
@@ -139,8 +139,8 @@ install_dashboard() {
         --set cert-manager.enabled=false \
         --set app.settings.global.defaultNamespace=kubernetes-dashboard \
         --wait --timeout=300s
-    
-    # Créer un ServiceAccount pour l'accès admin
+
+    # Create a ServiceAccount for admin access
     kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ServiceAccount
@@ -161,14 +161,14 @@ subjects:
   name: dashboard-admin
   namespace: kubernetes-dashboard
 EOF
-    
-    # Attendre que le token soit créé
+
+    # Wait for the token to be created
     sleep 5
-    
-    # Générer un token JWT avec la méthode recommandée
+
+    # Generate a JWT token with the recommended method
     local dashboard_token=$(kubectl -n kubernetes-dashboard create token dashboard-admin)
-    
-    # Créer l'ingress avec injection du token et HTTPS
+
+    # Create the ingress with token injection and HTTPS
     kubectl apply -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -200,20 +200,20 @@ spec:
             port:
               number: 443
 EOF
-    
-    # Attendre que tous les déploiements du dashboard soient prêts
-    log_info "⏳ Attente que tous les déploiements du dashboard soient opérationnels..."
+
+    # Wait for all dashboard deployments to be ready
+    log_info "⏳ Waiting for all dashboard deployments to be operational..."
     kubectl wait --for=condition=available deployment -l app.kubernetes.io/part-of=kubernetes-dashboard \
         -n kubernetes-dashboard --timeout=120s
-    
-    log_success "📈 Kubernetes Dashboard installé avec auto-login et HTTPS"
-    log_info "🌐 Accès: https://dashboard.127.0.0.1.nip.io"
+
+    log_success "📈 Kubernetes Dashboard installed with auto-login and HTTPS"
+    log_info "🌐 Access: https://dashboard.127.0.0.1.nip.io"
 }
 
-# Créer un pod curl pour les tests
+# Create a curl pod for testing
 create_curl_pod() {
-    log_info "🔧 Création du pod curl pour les tests..."
-    
+    log_info "🔧 Creating curl pod for testing..."
+
     kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Pod
@@ -227,7 +227,7 @@ spec:
   containers:
   - name: curl
     image: curlimages/curl:latest
-    command: ['sleep', '86400']  # 24 heures
+    command: ['sleep', '86400']  # 24 hours
     resources:
       requests:
         memory: "32Mi"
@@ -255,19 +255,19 @@ spec:
     targetPort: 8080
     name: http
 EOF
-    
-    # Attendre que le pod soit prêt
-    log_info "⏳ Attente que le pod curl soit prêt..."
+
+    # Wait for the pod to be ready
+    log_info "⏳ Waiting for curl pod to be ready..."
     kubectl wait --for=condition=ready pod/curl-test --timeout=60s
-    
-    log_success "🧪 Pod curl-test créé et prêt pour les tests"
+
+    log_success "🧪 curl-test pod created and ready for testing"
 }
 
-# Créer un certificat auto-signé pour les tests
+# Create a self-signed certificate for testing
 create_test_certificate() {
-    log_info "🔐 Création d'un certificat auto-signé pour les tests..."
-    
-    # Créer un ClusterIssuer pour les certificats auto-signés
+    log_info "🔐 Creating a self-signed certificate for testing..."
+
+    # Create a ClusterIssuer for self-signed certificates
     kubectl apply -f - <<EOF
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -294,17 +294,17 @@ spec:
   - "*.127.0.0.1.nip.io"
   - "*.local"
 EOF
-    
-    log_success "🔒 Certificat de test créé"
+
+    log_success "🔒 Test certificate created"
 }
 
-# Créer un serveur nginx de test avec ingress
+# Create a test nginx server with ingress
 create_test_nginx_server() {
-    log_info "🌐 Création d'un serveur nginx de test..."
-    
-    # Le namespace shadok existe déjà, pas besoin de le recréer
-    
-    # Déployer nginx avec une page personnalisée
+    log_info "🌐 Creating a test nginx server..."
+
+    # The shadok namespace already exists, no need to recreate it
+
+    # Deploy nginx with a custom page
     kubectl apply -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
@@ -351,7 +351,7 @@ metadata:
 data:
   index.html: |
     <!DOCTYPE html>
-    <html lang="fr">
+    <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -382,14 +382,14 @@ data:
         <div class="container">
             <div class="emoji">🎪</div>
             <h1>Shadok Kind Cluster</h1>
-            <p>Serveur nginx de test déployé avec succès !</p>
+            <p>Test nginx server deployed successfully!</p>
             <div class="info">
                 <strong>Cluster:</strong> kind-shadok-dev<br>
                 <strong>Namespace:</strong> shadok<br>
                 <strong>Ingress:</strong> shadok.127.0.0.1.nip.io<br>
-                <strong>Status:</strong> ✅ Opérationnel
+                <strong>Status:</strong> ✅ Operational
             </div>
-            <p>🚀 Votre environnement de développement Kubernetes est prêt !</p>
+            <p>🚀 Your Kubernetes development environment is ready!</p>
         </div>
     </body>
     </html>
@@ -436,110 +436,110 @@ spec:
             port:
               number: 80
 EOF
-    
-    # Attendre que le déploiement soit prêt
-    log_info "⏳ Attente que nginx soit prêt..."
+
+    # Wait for the deployment to be ready
+    log_info "⏳ Waiting for nginx to be ready..."
     kubectl wait --for=condition=available deployment/nginx-test -n shadok --timeout=60s
-    
-    log_success "🌐 Serveur nginx de test déployé avec ingress"
-    log_info "🔗 Accès: https://shadok.127.0.0.1.nip.io"
+
+    log_success "🌐 Test nginx server deployed with ingress"
+    log_info "🔗 Access: https://shadok.127.0.0.1.nip.io"
 }
 
-# Afficher les informations de configuration
+# Display configuration information
 show_config_info() {
-    log_success "🎉 === Configuration kind terminée ! ==="
+    log_success "🎉 === Kind configuration completed! ==="
     echo ""
-    log_info "🔧 Composants installés:"
-    echo "  - 🔐 cert-manager (gestion des certificats)"
-    echo "  - 🌐 ingress-nginx (avec snippets activés)"
-    echo "  - 📊 Kubernetes Dashboard (avec auto-login)"
-    echo "  - 🧪 Pod curl-test (pour les tests)"
-    echo "  - 🌐 Serveur nginx de test (avec ingress)"
+    log_info "🔧 Installed components:"
+    echo "  - 🔐 cert-manager (certificate management)"
+    echo "  - 🌐 ingress-nginx (with snippets enabled)"
+    echo "  - 📊 Kubernetes Dashboard (with auto-login)"
+    echo "  - 🧪 curl-test pod (for testing)"
+    echo "  - 🌐 Test nginx server (with ingress)"
     echo ""
-    log_info "🌐 Services disponibles:"
+    log_info "🌐 Available services:"
     echo "  - Dashboard: https://dashboard.127.0.0.1.nip.io"
     echo "  - Test nginx: https://shadok.127.0.0.1.nip.io"
     echo "  - Ingress: http://localhost (port 80)"
     echo "  - Ingress HTTPS: https://localhost (port 443)"
     echo ""
-    log_info "📋 Commandes utiles:"
+    log_info "📋 Useful commands:"
     echo "  - kubectl get pods -A"
     echo "  - kubectl exec -it curl-test -- curl -H \"Host: shadok.127.0.0.1.nip.io\" https://ingress-nginx-controller.ingress-nginx.svc.cluster.local"
     echo "  - kubectl exec -it curl-test -- curl -k https://dashboard.127.0.0.1.nip.io"
     echo "  - kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller"
     echo "  - kubectl get certificates"
     echo ""
-    log_info "🌐 Accès direct sans configuration:"
+    log_info "🌐 Direct access without configuration:"
     echo "  - Dashboard: https://dashboard.127.0.0.1.nip.io"
     echo "  - Test nginx: https://shadok.127.0.0.1.nip.io"
     echo ""
-    
-    # Afficher l'état des pods
-    log_info "📊 État des pods système:"
+
+    # Display pod status
+    log_info "📊 System pod status:"
     kubectl get pods -A -o wide | grep -E "(cert-manager|ingress-nginx|kubernetes-dashboard|curl-test)"
     echo ""
-    
-    # Afficher les ingress
-    log_info "🌐 Ingress configurés:"
+
+    # Display ingresses
+    log_info "🌐 Configured ingresses:"
     kubectl get ingress -A
 }
 
-# Fonction de test rapide
+# Quick test function
 test_configuration() {
-    log_info "🧪 === Test rapide de la configuration ==="
+    log_info "🧪 === Quick configuration test ==="
 
-    # Test de l'accès au service nginx shadok via ingress
+    # Test access to the shadok nginx service via ingress
     if curl -s -k -o /dev/null -w "%{http_code}" https://shadok.127.0.0.1.nip.io 2>/dev/null | grep -q "200"; then
-        log_success "✅ Accès au service nginx shadok via ingress réussi"
+        log_success "✅ Successfully accessed shadok nginx service via ingress"
     else
-        log_warning "⚠️  Impossible d'accéder au service nginx shadok via ingress"
+        log_warning "⚠️  Unable to access shadok nginx service via ingress"
     fi
 }
 
-# Créer les namespaces nécessaires
+# Create necessary namespaces
 create_namespaces() {
-    log_info "📁 Création des namespaces nécessaires..."
-    
-    # Créer le namespace shadok pour l'opérateur
+    log_info "📁 Creating necessary namespaces..."
+
+    # Create the shadok namespace for the operator
     kubectl create namespace shadok --dry-run=client -o yaml | kubectl apply -f -
-    log_success "✅ Namespace shadok créé"
+    log_success "✅ Shadok namespace created"
 }
 
-# Fonction principale
+# Main function
 main() {
-    log_info "🚀 === Configuration avancée du cluster kind '${CLUSTER_NAME}' ==="
+    log_info "🚀 === Advanced configuration of kind cluster '${CLUSTER_NAME}' ==="
     echo ""
-    
+
     check_prerequisites
     create_namespaces
     echo ""
-    
+
     add_helm_repos
     echo ""
-    
+
     install_cert_manager
     echo ""
-    
+
     verify_ingress_nginx
     echo ""
-    
+
     install_dashboard
     echo ""
-    
+
     create_curl_pod
     echo ""
-    
+
     create_test_certificate
     echo ""
-    
+
     create_test_nginx_server
     echo ""
-    
+
     test_configuration
     echo ""
-    
+
     show_config_info
 }
 
-# Exécuter le script principal
+# Execute the main script
 main "$@"
