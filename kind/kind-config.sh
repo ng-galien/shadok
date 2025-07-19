@@ -314,7 +314,7 @@ metadata:
   labels:
     app: nginx-test
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: nginx-test
@@ -390,6 +390,9 @@ data:
                 <strong>Status:</strong> ✅ Operational
             </div>
             <p>🚀 Your Kubernetes development environment is ready!</p>
+            <div class="info">
+                <a href="https://dashboard.127.0.0.1.nip.io" style="color: white; text-decoration: underline;">📊 Access Kubernetes Dashboard</a>
+            </div>
         </div>
     </body>
     </html>
