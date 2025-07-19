@@ -114,9 +114,10 @@ create_kind_config() {
 
     # Automatically discover available pods
     local pods_mounts=""
+    local pod_name=""
     for pod_dir in "${PODS_DIR}"/*/; do
         if [ -d "$pod_dir" ]; then
-            local pod_name=$(basename "$pod_dir")
+            pod_name=$(basename "$pod_dir")
             # Ignore build and node_modules directories
             if [[ "$pod_name" != "build" && "$pod_name" != "node_modules" ]]; then
                 pods_mounts="${pods_mounts}  - hostPath: ${pod_dir}
@@ -310,9 +311,10 @@ install_cert_manager() {
 create_pod_persistent_volumes() {
     log_info "💾 Creating PersistentVolumes for pod sources..."
 
+    local pod_name=""
     for pod_dir in "${PODS_DIR}"/*/; do
         if [ -d "$pod_dir" ]; then
-            local pod_name=$(basename "$pod_dir")
+            pod_name=$(basename "$pod_dir")
             # Ignore build and node_modules directories
             if [[ "$pod_name" != "build" && "$pod_name" != "node_modules" ]]; then
                 log_info "📁 Creating PV for ${pod_name}..."
@@ -416,9 +418,10 @@ show_cluster_info() {
     echo "  - 📦 Local registry: localhost:${REGISTRY_PORT} (mirrors docker.io)"
     echo ""
     log_info "� Pod sources mounted (readonly):"
+    local pod_name=""
     for pod_dir in "${PODS_DIR}"/*/; do
         if [ -d "$pod_dir" ]; then
-            local pod_name=$(basename "$pod_dir")
+            pod_name=$(basename "$pod_dir")
             if [[ "$pod_name" != "build" && "$pod_name" != "node_modules" ]]; then
                 echo "  - 📂 ${pod_name}: /pods/${pod_name}"
             fi
