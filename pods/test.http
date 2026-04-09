@@ -1,4 +1,0 @@
-import pod.http
-
-### test:node
-run pod.http (@podUrl=node-hello.127.0.1.nip.io)

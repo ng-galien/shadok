@@ -1,3 +1,6 @@
+import org.gradle.api.tasks.Copy
+import org.gradle.internal.classpath.Instrumented.systemProperty
+
 plugins {
     java
     alias(libs.plugins.quarkus)
@@ -16,14 +19,13 @@ dependencies {
     implementation(platform(project(":")))
 
     // Quarkus dependencies (using bundles)
-    implementation(libs.bundles.quarkus.core)
+    implementation(libs.bundles.quarkus)
+    implementation(libs.bundles.operator)
+    implementation(libs.fabric8.generator.annotations)
 
     // TLS support for webhooks
     implementation("io.quarkus:quarkus-vertx-http")
     implementation("io.quarkus:quarkus-tls-registry")
-
-    // Kubernetes dependencies (using bundles)
-    implementation(libs.bundles.operator)
 
     // Jackson for JSON processing
     implementation(libs.jackson.annotations)
@@ -42,6 +44,7 @@ tasks.withType<Test> {
 tasks.register<ProcessResources>("copyHelm") {
     into("build/chart/operator")
     from("src/main/chart/operator") {
+        val registry = findProperty("registry") ?: "docker.io"
         include("Chart.yaml", "values.yaml")
         expand(
             "chartName" to project.extra["chartName"],
@@ -58,17 +61,8 @@ tasks.register<ProcessResources>("copyHelm") {
     }
 }
 
-// Copy helm directory into the build output
-tasks.register<ProcessResources>("copyCrds") {
-    into("build/chart/operator/crds")
-    from("build/kubernetes") {
-        exclude("kubernetes.json", "kubernetes.yml")
-    }
-}
-
 tasks.named("build") {
     dependsOn("copyHelm")
-    dependsOn("copyCrds")
 }
 
 
@@ -94,7 +88,8 @@ quarkus {
         systemProperty("quarkus.container-image.insecure",
             (findProperty("env") as String) == "kind"
         )
-        //systemProperty("quarkus.operator-sdk.crd.output-directory", "crds")
+        systemProperty("quarkus.operator-sdk.crd.generate", "true")
+        systemProperty("quarkus.operator-sdk.crd.generate-all", "true")
+        systemProperty("quarkus.operator-sdk.crd.output-directory", "build/chart/operator/crds")
     }
 }
-

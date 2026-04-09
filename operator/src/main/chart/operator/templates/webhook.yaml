@@ -5,7 +5,7 @@ metadata:
   name: {{ default (include "operator.fullname" .) .Values.webhook.configuration.name }}
   annotations:
     {{- if .Values.webhook.certificate.create }}
-    cert-manager.io/inject-ca-from: shadok/webhook-server-cert
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "operator.certificateName" . }}
     {{- end }}
     {{- if .Values.webhook.configuration.annotations }}
     {{ toYaml .Values.webhook.configuration.annotations | nindent 4 }}

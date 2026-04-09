@@ -15,6 +15,7 @@ quarkus-operator-sdk = "7.2.0"
 
 # Kubernetes and Operator SDK
 fabric8-client = "6.13.4"
+fabric8-generator-annotations = "6.13.4"
 josdk-webhooks = "3.0.0"
 
 # Code quality and formatting
@@ -44,6 +45,7 @@ quarkus-operator-sdk = { module = "io.quarkiverse.operatorsdk:quarkus-operator-s
 
 # Kubernetes
 kubernetes-webhooks-core = { module = "io.javaoperatorsdk:kubernetes-webhooks-framework-core", version.ref = "josdk-webhooks" }
+fabric8-generator-annotations = { module = "io.fabric8:generator-annotations", version.ref = "fabric8-generator-annotations" }
 
 # Jackson
 jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations" }
@@ -55,7 +57,7 @@ rest-assured = { module = "io.rest-assured:rest-assured" }
 
 [bundles]
 # Bundle groups for common dependency sets
-quarkus-core = ["quarkus-arc", "quarkus-rest", "quarkus-rest-jackson"]
+quarkus = ["quarkus-arc", "quarkus-rest", "quarkus-rest-jackson"]
 operator = ["kubernetes-webhooks-core", "quarkus-operator-sdk"]
 testing = ["quarkus-junit5", "rest-assured"]
 
