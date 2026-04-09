@@ -11,7 +11,7 @@ java = "21"
 
 # Frameworks and platforms
 quarkus = "3.34.3"
-quarkus-operator-sdk = "7.2.0"
+quarkus-operator-sdk = "7.7.3"
 
 # Kubernetes and Operator SDK
 fabric8-client = "6.13.4"
