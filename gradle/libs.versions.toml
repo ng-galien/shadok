@@ -16,7 +16,7 @@ quarkus-operator-sdk = "7.7.3"
 # Kubernetes and Operator SDK
 fabric8-client = "6.13.4"
 fabric8-generator-annotations = "6.13.4"
-josdk-webhooks = "3.0.0"
+josdk-webhooks = "3.0.2"
 
 # Code quality and formatting
 spotless = "6.25.0"
