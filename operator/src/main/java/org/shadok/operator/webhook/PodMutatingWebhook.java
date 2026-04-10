@@ -112,7 +112,8 @@ public class PodMutatingWebhook {
 
     record AddInitContainer(Container initContainer) implements PodMutation {}
 
-    record TransformMainContainer(UnaryOperator<Container> transformation) implements PodMutation {}
+    record TransformMainContainer(String containerName, UnaryOperator<Container> transformation)
+        implements PodMutation {}
 
     record StartupProbe(String containerName) implements PodMutation {}
   }
@@ -153,8 +154,8 @@ public class PodMutatingWebhook {
       case PodMutation.AddVolumeMount(var containerName, var mount) ->
           addVolumeMount(pod, containerName, mount);
       case PodMutation.AddInitContainer(var initContainer) -> addInitContainer(pod, initContainer);
-      case PodMutation.TransformMainContainer(var transformation) ->
-          transformMainContainer(pod, transformation);
+      case PodMutation.TransformMainContainer(var containerName, var transformation) ->
+          transformMainContainer(pod, containerName, transformation);
       case PodMutation.StartupProbe(var containerName) -> {
         Consumer<Probe> increaseStartupProbeTimeout =
             probe -> {
@@ -277,6 +278,7 @@ public class PodMutatingWebhook {
     return List.of(
         new PodMutation.StartupProbe(targetContainerName),
         new PodMutation.TransformMainContainer(
+            targetContainerName,
             container -> transformForLiveReload(container, appSpec.applicationType())),
         new PodMutation.AddVolumeMount(targetContainerName, createTemporaryBuildVolumeMount()),
         new PodMutation.AddVolumeMount(targetContainerName, createProjectSourceVolumeMount()),
@@ -356,12 +358,15 @@ public class PodMutatingWebhook {
     return pod;
   }
 
-  private Pod transformMainContainer(Pod pod, UnaryOperator<Container> transformation) {
-    pod.getSpec().getContainers().stream()
-        .findFirst() // First container = main container
-        .map(transformation)
-        .ifPresent(
-            transformedContainer -> pod.getSpec().getContainers().set(0, transformedContainer));
+  private Pod transformMainContainer(
+      Pod pod, String containerName, UnaryOperator<Container> transformation) {
+    var containers = pod.getSpec().getContainers();
+    for (var i = 0; i < containers.size(); i++) {
+      if (containerName.equals(containers.get(i).getName())) {
+        containers.set(i, transformation.apply(containers.get(i)));
+        return pod;
+      }
+    }
     return pod;
   }
 

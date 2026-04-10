@@ -1,7 +1,9 @@
 package org.shadok.operator.webhook;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.fabric8.kubernetes.api.model.Container;
@@ -19,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.shadok.operator.model.ApplicationType;
+import org.shadok.operator.model.InitContainerMountSpec;
 import org.shadok.operator.model.application.ApplicationSpec;
 import org.shadok.operator.model.cache.DependencyCache;
 import org.shadok.operator.model.cache.DependencyCacheSpec;
@@ -128,10 +131,166 @@ class PodMutatingWebhookTest {
     assertContainerMount(mainContainer, "dependency-cache", "/cache", false);
   }
 
+  // -------------------- init container mounts --------------------
+
+  @Test
+  @DisplayName("initContainerMounts: liquibase mount name resolves to liquibase image")
+  void initContainerLiquibaseImage() {
+    var mount =
+        new InitContainerMountSpec(
+            "liquibase-changelog",
+            "/liquibase/changelog.xml",
+            "src/main/resources/db/migration/changelog.xml");
+    var appSpec = applicationSpec(ApplicationType.QUARKUS_GRADLE, null, List.of(mount));
+
+    var mutated =
+        webhook.mutatePod(
+            inputPod(), appSpec, Optional.of(projectSource()), Optional.of(dependencyCache()));
+
+    var initContainer = findInitContainer(mutated, "liquibase-changelog");
+    assertEquals("liquibase/liquibase:latest", initContainer.getImage());
+    assertEquals(1, initContainer.getVolumeMounts().size());
+
+    var vm = initContainer.getVolumeMounts().get(0);
+    assertEquals("project-source", vm.getName());
+    assertEquals("/liquibase/changelog.xml", vm.getMountPath());
+    assertEquals("src/main/resources/db/migration/changelog.xml", vm.getSubPath());
+    assertTrue(Boolean.TRUE.equals(vm.getReadOnly()), "init container mount should be read-only");
+  }
+
+  @Test
+  @DisplayName("initContainerMounts: flyway mount name resolves to flyway image")
+  void initContainerFlywayImage() {
+    var mount =
+        new InitContainerMountSpec(
+            "flyway-migrations", "/flyway/sql", "src/main/resources/db/migration");
+    var appSpec = applicationSpec(ApplicationType.SPRING_MAVEN, null, List.of(mount));
+
+    var mutated =
+        webhook.mutatePod(
+            inputPod(), appSpec, Optional.of(projectSource()), Optional.of(dependencyCache()));
+
+    var initContainer = findInitContainer(mutated, "flyway-migrations");
+    assertEquals("flyway/flyway:latest", initContainer.getImage());
+  }
+
+  @Test
+  @DisplayName("initContainerMounts: arbitrary mount name falls back to busybox image")
+  void initContainerDefaultBusyboxImage() {
+    var mount = new InitContainerMountSpec("setup-config", "/config/app.yml", "config/app.yml");
+    var appSpec = applicationSpec(ApplicationType.NODE_NPM, null, List.of(mount));
+
+    var mutated =
+        webhook.mutatePod(
+            inputPod(), appSpec, Optional.of(projectSource()), Optional.of(dependencyCache()));
+
+    var initContainer = findInitContainer(mutated, "setup-config");
+    assertEquals("busybox:latest", initContainer.getImage());
+  }
+
+  @Test
+  @DisplayName("initContainerMounts: multiple mounts create multiple init containers")
+  void initContainerMultipleMounts() {
+    var liquibase =
+        new InitContainerMountSpec(
+            "liquibase-changelog", "/liquibase/changelog.xml", "db/changelog.xml");
+    var config =
+        new InitContainerMountSpec("config-bootstrap", "/config/bootstrap.yml", "config/boot.yml");
+    var appSpec = applicationSpec(ApplicationType.QUARKUS_GRADLE, null, List.of(liquibase, config));
+
+    var mutated =
+        webhook.mutatePod(
+            inputPod(), appSpec, Optional.of(projectSource()), Optional.of(dependencyCache()));
+
+    assertEquals(2, mutated.getSpec().getInitContainers().size());
+    findInitContainer(mutated, "liquibase-changelog");
+    findInitContainer(mutated, "config-bootstrap");
+  }
+
+  // -------------------- multi-container resolution --------------------
+
+  @Test
+  @DisplayName("multi-container: containerName=app mutates only 'app', leaves 'sidecar' intact")
+  void multiContainerTargetsNamedContainer() {
+    var appSpec = applicationSpec(ApplicationType.SPRING_MAVEN, "app", List.of());
+    var pod = inputPodWithContainers("sidecar", "app");
+
+    var mutated =
+        webhook.mutatePod(
+            pod, appSpec, Optional.of(projectSource()), Optional.of(dependencyCache()));
+
+    var app = findContainer(mutated, "app");
+    assertEquals(List.of("mvn", "spring-boot:run"), app.getCommand());
+    assertEquals("/workspace", app.getWorkingDir());
+    assertContainerMount(app, "project-source", "/workspace", true);
+    assertContainerMount(app, "dependency-cache", "/cache", false);
+
+    var sidecar = findContainer(mutated, "sidecar");
+    assertTrue(
+        sidecar.getCommand() == null || sidecar.getCommand().isEmpty(),
+        "sidecar command should be untouched");
+    assertFalse(
+        sidecar.getVolumeMounts().stream().anyMatch(m -> "project-source".equals(m.getName())),
+        "sidecar should not receive project-source mount");
+    assertFalse(
+        sidecar.getVolumeMounts().stream().anyMatch(m -> "dependency-cache".equals(m.getName())),
+        "sidecar should not receive dependency-cache mount");
+  }
+
+  @Test
+  @DisplayName(
+      "multi-container: no containerName specified throws with available containers listed")
+  void multiContainerWithoutContainerNameThrows() {
+    var appSpec = applicationSpec(ApplicationType.SPRING_MAVEN, null, List.of());
+    var pod = inputPodWithContainers("sidecar", "app");
+
+    var ex =
+        assertThrows(
+            RuntimeException.class,
+            () ->
+                webhook.mutatePod(
+                    pod, appSpec, Optional.of(projectSource()), Optional.of(dependencyCache())));
+
+    assertTrue(
+        ex.getMessage().contains("containerName"),
+        () -> "exception message should mention containerName, was: " + ex.getMessage());
+    assertTrue(
+        ex.getMessage().contains("sidecar") && ex.getMessage().contains("app"),
+        () -> "exception message should list available containers, was: " + ex.getMessage());
+  }
+
+  @Test
+  @DisplayName(
+      "multi-container: containerName that does not exist throws with available containers")
+  void multiContainerWithUnknownContainerNameThrows() {
+    var appSpec = applicationSpec(ApplicationType.SPRING_MAVEN, "nonexistent", List.of());
+    var pod = inputPodWithContainers("sidecar", "app");
+
+    var ex =
+        assertThrows(
+            RuntimeException.class,
+            () ->
+                webhook.mutatePod(
+                    pod, appSpec, Optional.of(projectSource()), Optional.of(dependencyCache())));
+
+    assertTrue(
+        ex.getMessage().contains("nonexistent"),
+        () -> "exception should mention the bad container name, was: " + ex.getMessage());
+    assertTrue(
+        ex.getMessage().contains("sidecar") && ex.getMessage().contains("app"),
+        () -> "exception should list available containers, was: " + ex.getMessage());
+  }
+
   // ----------------------------- fixtures -----------------------------
 
   private ApplicationSpec applicationSpec(ApplicationType type) {
-    return new ApplicationSpec(type, "source-ref", "cache-ref", List.of(), Map.of(), null);
+    return applicationSpec(type, null, List.of());
+  }
+
+  private ApplicationSpec applicationSpec(
+      ApplicationType type, String containerName, List<InitContainerMountSpec> initMounts) {
+    return new ApplicationSpec(
+        type, "source-ref", "cache-ref", initMounts, Map.of(), containerName);
   }
 
   private ProjectSource projectSource() {
@@ -181,6 +340,26 @@ class PodMutatingWebhookTest {
         .build();
   }
 
+  private Pod inputPodWithContainers(String... containerNames) {
+    var builder =
+        new PodBuilder()
+            .withNewMetadata()
+            .withName(APP_NAME)
+            .withNamespace(NAMESPACE)
+            .addToAnnotations("org.shadok/application", APP_NAME)
+            .endMetadata()
+            .withNewSpec();
+    for (var name : containerNames) {
+      builder =
+          builder.addToContainers(
+              new ContainerBuilder()
+                  .withName(name)
+                  .withImage("example/" + name + ":1.0.0")
+                  .build());
+    }
+    return builder.endSpec().build();
+  }
+
   // ----------------------------- assertions -----------------------------
 
   private Container findContainer(Pod pod, String name) {
@@ -188,6 +367,15 @@ class PodMutatingWebhookTest {
         .filter(c -> name.equals(c.getName()))
         .findFirst()
         .orElseThrow(() -> new AssertionError("Container '" + name + "' not found in pod"));
+  }
+
+  private Container findInitContainer(Pod pod, String name) {
+    var initContainers = pod.getSpec().getInitContainers();
+    assertNotNull(initContainers, "pod should have init containers");
+    return initContainers.stream()
+        .filter(c -> name.equals(c.getName()))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("Init container '" + name + "' not found in pod"));
   }
 
   private void assertEnvVar(Container container, String name, String expectedValue) {
