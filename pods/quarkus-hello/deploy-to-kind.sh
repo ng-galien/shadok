@@ -51,69 +51,69 @@ print_warning() {
 # Vérifier les prérequis
 check_prerequisites() {
     print_header "Vérification des Prérequis"
-    
+
     for tool in kind kubectl docker gradle; do
         if ! command -v $tool > /dev/null 2>&1; then
             print_error "$tool n'est pas installé"
             exit 1
         fi
     done
-    
+
     if ! docker info > /dev/null 2>&1; then
         print_error "Docker n'est pas en cours d'exécution"
         exit 1
     fi
-    
+
     print_success "Tous les prérequis sont OK"
 }
 
 # Vérifier le cluster Kind
 check_cluster() {
     print_header "Vérification du Cluster Kind"
-    
+
     if ! kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
         print_error "Cluster Kind '$CLUSTER_NAME' non trouvé"
         print_step "Démarrez d'abord l'opérateur avec: cd ../../operator && ./deploy-to-kind.sh"
         exit 1
     fi
-    
+
     if ! kubectl cluster-info --context "kind-${CLUSTER_NAME}" > /dev/null 2>&1; then
         print_error "Impossible de se connecter au cluster"
         exit 1
     fi
-    
+
     print_success "Cluster '$CLUSTER_NAME' accessible"
 }
 
 # Construire l'image
 build_image() {
     print_header "Construction de l'Image"
-    
+
     print_step "Build Gradle..."
     ./gradlew build -x test
-    
+
     print_step "Build image Docker..."
     docker build -f src/main/docker/Dockerfile.jvm -t "$FULL_IMAGE" .
-    
+
     print_step "Push vers le registre local..."
     docker push "$FULL_IMAGE"
-    
+
     print_success "Image $FULL_IMAGE construite et poussée"
 }
 
 # Déployer l'application avec CRDs
 deploy_app() {
     print_header "Déploiement de l'Application"
-    
+
     # S'assurer que les PVCs sont dans le bon namespace
     ensure_pvcs_namespace
-    
+
     print_step "Application des ressources Shadok CRDs..."
     kubectl apply -f k8s/shadok-resources.yml
-    
+
     print_step "Attente que l'opérateur traite les ressources..."
     sleep 10
-    
+
     # Vérifier que l'application est créée
     if kubectl get application quarkus-hello-app -n "$NAMESPACE" > /dev/null 2>&1; then
         print_success "Ressources Shadok CRDs appliquées"
@@ -121,27 +121,27 @@ deploy_app() {
         print_error "Échec de la création des ressources CRDs"
         return 1
     fi
-    
+
     # Déployer l'application avec le manifest Quarkus (qui contient l'annotation Shadok)
     print_step "Déploiement de l'application avec le manifest Quarkus..."
     kubectl apply -f build/kubernetes/kind.yml
-    
+
     print_step "Attente que le déploiement soit prêt..."
     kubectl wait --for=condition=available deployment/quarkus-hello -n "$NAMESPACE" --timeout=120s
-    
+
     print_success "Application déployée avec l'annotation Shadok"
 }
 
 # Désinstaller l'application
 uninstall_app() {
     print_header "Désinstallation de l'Application"
-    
+
     print_step "Suppression des ressources Shadok CRDs..."
     kubectl delete -f k8s/shadok-resources.yml --ignore-not-found=true
-    
+
     print_step "Attente de la suppression des ressources..."
     sleep 5
-    
+
     # Vérifier que les ressources sont supprimées
     local resources_deleted=true
     for app in quarkus-hello-app test-app; do
@@ -150,51 +150,51 @@ uninstall_app() {
             break
         fi
     done
-    
+
     if [ "$resources_deleted" = true ]; then
         print_success "Ressources Shadok supprimées"
     else
         print_warning "Certaines ressources peuvent encore exister"
     fi
-    
+
     # Nettoyer les déploiements restants
     print_step "Nettoyage des déploiements restants..."
     kubectl delete deployment quarkus-hello -n "$NAMESPACE" --ignore-not-found=true
     kubectl delete service quarkus-hello -n "$NAMESPACE" --ignore-not-found=true
     kubectl delete ingress quarkus-hello -n "$NAMESPACE" --ignore-not-found=true
-    
+
     print_success "Désinstallation terminée"
 }
 
 # Redémarrer le pod
 restart_app() {
     print_header "Redémarrage de l'Application"
-    
+
     # Vérifier que l'application existe
     if ! kubectl get deployment quarkus-hello -n "$NAMESPACE" > /dev/null 2>&1; then
         print_error "Aucun déploiement 'quarkus-hello' trouvé"
         print_step "Utilisez --install pour déployer l'application d'abord"
         return 1
     fi
-    
+
     print_step "Redémarrage du déploiement..."
     kubectl rollout restart deployment/quarkus-hello -n "$NAMESPACE"
-    
+
     print_step "Attente du redémarrage..."
     kubectl rollout status deployment/quarkus-hello -n "$NAMESPACE" --timeout=120s
-    
+
     print_success "Application redémarrée"
 }
 
 # Installer les CRDs
 install_crds() {
     print_header "Installation des CRDs Shadok"
-    
+
     print_step "Application des ressources CRDs..."
     kubectl apply -f k8s/shadok-resources.yml
-    
+
     print_step "Vérification des ressources créées..."
-    
+
     # Lister les ressources créées
     echo ""
     echo "📋 Ressources créées :"
@@ -202,56 +202,56 @@ install_crds() {
     kubectl get projectsources -n "$NAMESPACE" 2>/dev/null || echo "  Aucune ProjectSource"
     kubectl get dependencycaches -n "$NAMESPACE" 2>/dev/null || echo "  Aucune DependencyCache"
     echo ""
-    
+
     print_success "CRDs installées"
 }
 
 # Désinstaller les CRDs
 uninstall_crds() {
     print_header "Désinstallation des CRDs Shadok"
-    
+
     print_step "Suppression des ressources CRDs..."
     kubectl delete -f k8s/shadok-resources.yml --ignore-not-found=true
-    
+
     print_step "Nettoyage des ressources restantes..."
     # Nettoyer les PVCs si elles existent
     kubectl delete pvc quarkus-hello-source-pvc -n "$NAMESPACE" --ignore-not-found=true
     kubectl delete pvc java-cache-pvc -n "$NAMESPACE" --ignore-not-found=true
-    
+
     print_success "CRDs désinstallées"
 }
 
 # S'assurer que les PVCs sont dans le bon namespace
 ensure_pvcs_namespace() {
     print_header "Vérification des PVCs"
-    
+
     # Vérifier si les PVCs existent dans le mauvais namespace (default)
     local wrong_pvcs=$(kubectl get pvc -n default -l app=shadok --no-headers 2>/dev/null | wc -l)
     if [ "$wrong_pvcs" -gt 0 ]; then
         print_warning "PVCs trouvées dans le namespace 'default', nettoyage nécessaire"
-        
+
         # Supprimer les PVCs du namespace default
         print_step "Suppression des PVCs du namespace 'default'..."
         kubectl delete pvc -n default -l app=shadok --ignore-not-found=true
-        
+
         # Nettoyer les PVs pour qu'ils redeviennent Available
         print_step "Nettoyage des PersistentVolumes..."
         for pv in $(kubectl get pv -l app=shadok --no-headers | awk '{print $1}'); do
             kubectl patch pv "$pv" --type merge -p '{"spec":{"claimRef":null}}'
         done
-        
+
         print_success "Nettoyage terminé"
     fi
-    
+
     # Créer le namespace shadok s'il n'existe pas
     print_step "Création du namespace 'shadok' si nécessaire..."
     kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-    
+
     # Vérifier si les PVCs existent dans le bon namespace
     local correct_pvcs=$(kubectl get pvc -n "$NAMESPACE" -l app=shadok --no-headers 2>/dev/null | wc -l)
     if [ "$correct_pvcs" -eq 0 ]; then
         print_step "Création des PVCs dans le namespace '$NAMESPACE'..."
-        
+
         # Créer les PVCs pour quarkus-hello
         kubectl apply -f - <<EOF
 apiVersion: v1
@@ -275,7 +275,7 @@ spec:
       pod: quarkus-hello
       type: sources
 EOF
-        
+
         print_success "PVCs créées dans le namespace '$NAMESPACE'"
     else
         print_success "PVCs déjà présentes dans le namespace '$NAMESPACE'"
@@ -285,11 +285,11 @@ EOF
 # Tester l'application
 test_app() {
     print_header "Test de l'Application"
-    
+
     # Utiliser directement l'URL nip.io
     local ingress_url="http://quarkus-hello.127.0.0.1.nip.io"
     print_step "URL de test: $ingress_url"
-    
+
     # Vérifier que l'ingress est prêt
     print_step "Vérification de l'ingress..."
     local ingress_ready=false
@@ -305,14 +305,14 @@ test_app() {
         fi
         sleep 2
     done
-    
+
     if [ "$ingress_ready" = false ]; then
         print_warning "Ingress pas encore prêt, mais test direct avec nip.io"
     fi
-    
+
     print_step "Attente que l'application soit prête..."
     sleep 5
-    
+
     # Test de l'endpoint principal
     print_step "Test: curl $ingress_url/hello"
     local hello_response=$(curl -s "$ingress_url/hello" 2>/dev/null || echo "")
@@ -322,7 +322,7 @@ test_app() {
         print_error "❌ Endpoint /hello inaccessible"
         return 1
     fi
-    
+
     # Test de l'endpoint JSON
     print_step "Test: curl $ingress_url/hello/json"
     local json_response=$(curl -s "$ingress_url/hello/json" 2>/dev/null || echo "")
@@ -331,7 +331,7 @@ test_app() {
     else
         print_warning "⚠️  Endpoint /hello/json inaccessible ou format inattendu"
     fi
-    
+
     echo ""
     print_success "🎉 Application accessible via: $ingress_url"
 }
@@ -340,19 +340,19 @@ test_app() {
 # Afficher les informations de déploiement
 show_status() {
     print_header "État du Déploiement"
-    
+
     echo "🎯 Application: quarkus-hello"
     echo "📦 Namespace: $NAMESPACE"
     echo "🏷️  Image: $FULL_IMAGE"
     echo ""
-    
+
     # État des ressources CRDs
     echo "📋 Ressources Shadok CRDs:"
     kubectl get applications -n "$NAMESPACE" 2>/dev/null || echo "  Aucune Application"
-    kubectl get projectsources -n "$NAMESPACE" 2>/dev/null || echo "  Aucune ProjectSource"  
+    kubectl get projectsources -n "$NAMESPACE" 2>/dev/null || echo "  Aucune ProjectSource"
     kubectl get dependencycaches -n "$NAMESPACE" 2>/dev/null || echo "  Aucune DependencyCache"
     echo ""
-    
+
     # État du déploiement
     echo "📋 Déploiement Kubernetes:"
     if kubectl get deployment quarkus-hello -n "$NAMESPACE" > /dev/null 2>&1; then
@@ -362,7 +362,7 @@ show_status() {
         echo "  Aucun déploiement actif"
     fi
     echo ""
-    
+
     # Ingress
     if kubectl get ingress quarkus-hello -n "$NAMESPACE" > /dev/null 2>&1; then
         echo "🌐 Accès via Ingress:"
@@ -385,7 +385,7 @@ main() {
     local ACTION="install"  # Action par défaut
     local SKIP_BUILD=false
     local SKIP_TESTS=false
-    
+
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -449,7 +449,7 @@ main() {
                 ;;
         esac
     done
-    
+
     # Header
     echo -e "${PURPLE}"
     echo "🚀 ======================================== 🚀"
@@ -473,11 +473,11 @@ main() {
     esac
     echo "========================================"
     echo -e "${NC}"
-    
+
     # Vérifications communes
     check_prerequisites
     check_cluster
-    
+
     # Exécution selon l'action
     case $ACTION in
         "install")
