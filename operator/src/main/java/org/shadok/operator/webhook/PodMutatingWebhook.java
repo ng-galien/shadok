@@ -78,9 +78,25 @@ public class PodMutatingWebhook {
   Function<ApplicationSpec, UnaryOperator<Pod>> mutateOp =
       appSpec ->
           pod -> {
-            var mutationContext = createMutationContext(appSpec, pod);
-            return applyMutations(pod, mutationContext);
+            var namespace = pod.getMetadata().getNamespace();
+            var projectSource = findProjectSource(appSpec.projectSourceName(), namespace);
+            var dependencyCache = findDependencyCache(appSpec.dependencyCacheName(), namespace);
+            return mutatePod(pod, appSpec, projectSource, dependencyCache);
           };
+
+  /**
+   * Pure mutation entry point: given a Pod and already-resolved CRD references, apply the full
+   * mutation pipeline. This method is package-private so tests can exercise the mutation logic
+   * without a KubernetesClient.
+   */
+  Pod mutatePod(
+      Pod pod,
+      ApplicationSpec appSpec,
+      Optional<ProjectSource> projectSource,
+      Optional<DependencyCache> dependencyCache) {
+    var mutationContext = createMutationContext(appSpec, pod, projectSource, dependencyCache);
+    return applyMutations(pod, mutationContext);
+  }
 
   // ADT to model different types of mutations
   public sealed interface PodMutation
@@ -109,11 +125,11 @@ public class PodMutatingWebhook {
       ApplicationType applicationType,
       List<PodMutation> mutations) {}
 
-  private MutationContext createMutationContext(ApplicationSpec appSpec, Pod pod) {
-    var projectSource =
-        findProjectSource(appSpec.projectSourceName(), pod.getMetadata().getNamespace());
-    var dependencyCache =
-        findDependencyCache(appSpec.dependencyCacheName(), pod.getMetadata().getNamespace());
+  private MutationContext createMutationContext(
+      ApplicationSpec appSpec,
+      Pod pod,
+      Optional<ProjectSource> projectSource,
+      Optional<DependencyCache> dependencyCache) {
     var applicationType = appSpec.applicationType();
 
     var mutations =
