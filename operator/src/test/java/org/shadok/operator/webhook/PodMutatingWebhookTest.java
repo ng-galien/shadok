@@ -12,6 +12,7 @@ import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
+import io.fabric8.kubernetes.api.model.ProbeBuilder;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import java.util.List;
@@ -281,6 +282,137 @@ class PodMutatingWebhookTest {
         () -> "exception should list available containers, was: " + ex.getMessage());
   }
 
+  // -------------------- missing CRD references --------------------
+
+  @Test
+  @DisplayName("missing ProjectSource: PVC volumes are skipped but live-reload command is applied")
+  void missingProjectSourceSkipsProjectSourceVolume() {
+    var appSpec = applicationSpec(ApplicationType.SPRING_MAVEN);
+
+    var mutated =
+        webhook.mutatePod(inputPod(), appSpec, Optional.empty(), Optional.of(dependencyCache()));
+
+    assertFalse(
+        hasVolume(mutated, "project-source"),
+        "no project-source volume should be added when ProjectSource is missing");
+    assertFalse(
+        hasVolume(mutated, "temporary-build"),
+        "no temporary-build volume should be added when ProjectSource is missing");
+    assertTrue(
+        hasVolume(mutated, "dependency-cache"), "dependency-cache volume should still be added");
+
+    var mainContainer = findContainer(mutated, MAIN_CONTAINER);
+    assertEquals(
+        List.of("mvn", "spring-boot:run"),
+        mainContainer.getCommand(),
+        "live-reload command should still be applied");
+    assertEquals("/workspace", mainContainer.getWorkingDir());
+  }
+
+  @Test
+  @DisplayName(
+      "missing DependencyCache: cache volume is skipped but live-reload command is applied")
+  void missingDependencyCacheSkipsDependencyCacheVolume() {
+    var appSpec = applicationSpec(ApplicationType.QUARKUS_GRADLE);
+
+    var mutated =
+        webhook.mutatePod(inputPod(), appSpec, Optional.of(projectSource()), Optional.empty());
+
+    assertFalse(
+        hasVolume(mutated, "dependency-cache"),
+        "no dependency-cache volume should be added when DependencyCache is missing");
+    assertTrue(hasVolume(mutated, "project-source"));
+    assertTrue(hasVolume(mutated, "temporary-build"));
+
+    var mainContainer = findContainer(mutated, MAIN_CONTAINER);
+    assertEquals(
+        List.of(
+            "./gradlew",
+            "-I",
+            "/cache/init/buildDir.gradle",
+            "--project-cache-dir",
+            "/build/project/.gradle",
+            "--info",
+            "--no-daemon",
+            "quarkusDev"),
+        mainContainer.getCommand());
+  }
+
+  @Test
+  @DisplayName("missing both refs: no PVC volumes, but command and workingDir are still applied")
+  void missingBothRefsStillAppliesCommandAndWorkingDir() {
+    var appSpec = applicationSpec(ApplicationType.NODE_NPM);
+
+    var mutated = webhook.mutatePod(inputPod(), appSpec, Optional.empty(), Optional.empty());
+
+    assertFalse(hasVolume(mutated, "project-source"));
+    assertFalse(hasVolume(mutated, "dependency-cache"));
+    assertFalse(hasVolume(mutated, "temporary-build"));
+    // init-scripts ConfigMap volume is unconditional and should still be present
+    assertTrue(
+        hasVolume(mutated, "init-scripts"),
+        "init-scripts ConfigMap volume should be added unconditionally");
+
+    var mainContainer = findContainer(mutated, MAIN_CONTAINER);
+    assertEquals(List.of("npm", "run", "dev"), mainContainer.getCommand());
+    assertEquals("/workspace", mainContainer.getWorkingDir());
+  }
+
+  // -------------------- startup probe handling --------------------
+
+  @Test
+  @DisplayName("existing startup probe: timeout values are extended for live-reload startup")
+  void existingStartupProbeGetsExtendedTimeout() {
+    var appSpec = applicationSpec(ApplicationType.SPRING_MAVEN);
+    var pod =
+        new PodBuilder()
+            .withNewMetadata()
+            .withName(APP_NAME)
+            .withNamespace(NAMESPACE)
+            .addToAnnotations("org.shadok/application", APP_NAME)
+            .endMetadata()
+            .withNewSpec()
+            .withContainers(
+                new ContainerBuilder()
+                    .withName(MAIN_CONTAINER)
+                    .withImage("example/app:1.0.0")
+                    .withStartupProbe(
+                        new ProbeBuilder()
+                            .withInitialDelaySeconds(5)
+                            .withPeriodSeconds(2)
+                            .withFailureThreshold(3)
+                            .build())
+                    .build())
+            .endSpec()
+            .build();
+
+    var mutated =
+        webhook.mutatePod(
+            pod, appSpec, Optional.of(projectSource()), Optional.of(dependencyCache()));
+
+    var probe = findContainer(mutated, MAIN_CONTAINER).getStartupProbe();
+    assertNotNull(probe, "startup probe should still exist after mutation");
+    assertEquals(30, probe.getInitialDelaySeconds(), "initialDelaySeconds should be bumped to 30");
+    assertEquals(10, probe.getPeriodSeconds(), "periodSeconds should be bumped to 10");
+    assertEquals(50, probe.getFailureThreshold(), "failureThreshold should be bumped to 50");
+  }
+
+  @Test
+  @DisplayName("no startup probe: mutation does not crash and does not add a probe")
+  void containerWithoutStartupProbeStaysWithoutStartupProbe() {
+    var appSpec = applicationSpec(ApplicationType.NODE_NPM);
+
+    var mutated =
+        webhook.mutatePod(
+            inputPod(), appSpec, Optional.of(projectSource()), Optional.of(dependencyCache()));
+
+    var probe = findContainer(mutated, MAIN_CONTAINER).getStartupProbe();
+    // Current behavior: StartupProbe mutation only extends an existing probe, never adds one.
+    // If this changes (e.g. to add a default probe when the main container doesn't have one),
+    // update this test to assert the new contract.
+    assertEquals(null, probe, "no startup probe should be added if the container didn't have one");
+  }
+
   // ----------------------------- fixtures -----------------------------
 
   private ApplicationSpec applicationSpec(ApplicationType type) {
@@ -436,6 +568,11 @@ class PodMutatingWebhookTest {
         .filter(v -> volumeName.equals(v.getName()))
         .findFirst()
         .orElseThrow(() -> new AssertionError("volume '" + volumeName + "' not found in pod"));
+  }
+
+  private boolean hasVolume(Pod pod, String volumeName) {
+    var volumes = pod.getSpec().getVolumes();
+    return volumes != null && volumes.stream().anyMatch(v -> volumeName.equals(v.getName()));
   }
 
   private void assertContainerMount(
