@@ -8,7 +8,6 @@ import io.javaoperatorsdk.webhook.admission.Operation;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import java.util.*;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
@@ -137,7 +136,7 @@ public class PodMutatingWebhook {
         Stream.of(
                 createVolumeMutations(projectSource, dependencyCache),
                 createInitContainerMutations(appSpec, projectSource),
-                createMainContainerMutations(appSpec, pod))
+                createMainContainerMutations(appSpec, pod, projectSource, dependencyCache))
             .flatMap(List::stream)
             .toList();
 
@@ -157,21 +156,52 @@ public class PodMutatingWebhook {
       case PodMutation.TransformMainContainer(var containerName, var transformation) ->
           transformMainContainer(pod, containerName, transformation);
       case PodMutation.StartupProbe(var containerName) -> {
-        Consumer<Probe> increaseStartupProbeTimeout =
-            probe -> {
-              // Logic to increase startup probe timeout
-              probe.setInitialDelaySeconds(30);
-              probe.setPeriodSeconds(10);
-              probe.setFailureThreshold(50);
-            };
         pod.getSpec().getContainers().stream()
             .filter(container -> container.getName().equals(containerName))
             .findFirst()
-            .map(Container::getStartupProbe)
-            .ifPresent(increaseStartupProbeTimeout);
+            .ifPresent(PodMutatingWebhook::ensureStartupProbeForLiveReload);
         yield pod;
       }
     };
+  }
+
+  /**
+   * Ensure the container has a startup probe configured for live-reload boot time.
+   *
+   * <p>Live-reload dev modes ({@code mvn quarkus:dev}, {@code ./gradlew bootRun}, {@code ./gradlew
+   * quarkusDev}) typically take 60-120s to start. Without a startup probe, the container's liveness
+   * probe (if any) will fail during that window and Kubernetes will enter a crash loop.
+   *
+   * <p>Behavior:
+   *
+   * <ul>
+   *   <li>If the container already has a startup probe, bump its timeouts to 30/10/50.
+   *   <li>Otherwise, if the container has a liveness probe, derive a startup probe from it (reusing
+   *       the same handler: httpGet / exec / tcpSocket / grpc) and override only the three timeout
+   *       fields. This way the startup check exercises the same endpoint the container author chose
+   *       for liveness.
+   *   <li>If neither probe is present, do nothing: no liveness means no crash loop risk.
+   * </ul>
+   */
+  private static void ensureStartupProbeForLiveReload(Container container) {
+    var existingStartup = container.getStartupProbe();
+    if (existingStartup != null) {
+      existingStartup.setInitialDelaySeconds(30);
+      existingStartup.setPeriodSeconds(10);
+      existingStartup.setFailureThreshold(50);
+      return;
+    }
+    var liveness = container.getLivenessProbe();
+    if (liveness == null) {
+      return;
+    }
+    var derived =
+        new ProbeBuilder(liveness)
+            .withInitialDelaySeconds(30)
+            .withPeriodSeconds(10)
+            .withFailureThreshold(50)
+            .build();
+    container.setStartupProbe(derived);
   }
 
   // Functions for creating mutations
@@ -271,19 +301,35 @@ public class PodMutatingWebhook {
         });
   }
 
-  private List<PodMutation> createMainContainerMutations(ApplicationSpec appSpec, Pod pod) {
-    // Logic for finding the target container name based on ApplicationSpec
+  private List<PodMutation> createMainContainerMutations(
+      ApplicationSpec appSpec,
+      Pod pod,
+      Optional<ProjectSource> projectSource,
+      Optional<DependencyCache> dependencyCache) {
     String targetContainerName = determineTargetContainerName(appSpec, pod);
 
-    return List.of(
-        new PodMutation.StartupProbe(targetContainerName),
+    var mutations = new ArrayList<PodMutation>();
+    mutations.add(new PodMutation.StartupProbe(targetContainerName));
+    mutations.add(
         new PodMutation.TransformMainContainer(
             targetContainerName,
-            container -> transformForLiveReload(container, appSpec.applicationType())),
-        new PodMutation.AddVolumeMount(targetContainerName, createTemporaryBuildVolumeMount()),
-        new PodMutation.AddVolumeMount(targetContainerName, createProjectSourceVolumeMount()),
-        new PodMutation.AddVolumeMount(targetContainerName, createGradleIinitVolume()),
-        new PodMutation.AddVolumeMount(targetContainerName, createDependencyCacheVolumeMount()));
+            container -> transformForLiveReload(container, appSpec.applicationType())));
+    // init-scripts ConfigMap is always mounted (see createConfigGradleConfigMapVolumeMutation)
+    mutations.add(new PodMutation.AddVolumeMount(targetContainerName, createGradleIinitVolume()));
+    // PVC mounts are only emitted when their backing ProjectSource / DependencyCache exists:
+    // otherwise Kubernetes would refuse to admit the Pod with a "volume not found" error, which
+    // is a confusing symptom for a missing Shadok reference.
+    if (projectSource.isPresent()) {
+      mutations.add(
+          new PodMutation.AddVolumeMount(targetContainerName, createTemporaryBuildVolumeMount()));
+      mutations.add(
+          new PodMutation.AddVolumeMount(targetContainerName, createProjectSourceVolumeMount()));
+    }
+    if (dependencyCache.isPresent()) {
+      mutations.add(
+          new PodMutation.AddVolumeMount(targetContainerName, createDependencyCacheVolumeMount()));
+    }
+    return mutations;
   }
 
   /**

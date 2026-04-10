@@ -307,6 +307,15 @@ class PodMutatingWebhookTest {
         mainContainer.getCommand(),
         "live-reload command should still be applied");
     assertEquals("/workspace", mainContainer.getWorkingDir());
+    // The corresponding volume mounts must also be absent so Kubernetes does not reject the
+    // Pod with a "volume not found" error.
+    assertFalse(
+        hasContainerMount(mainContainer, "project-source"),
+        "main container should not have a dangling project-source mount");
+    assertFalse(
+        hasContainerMount(mainContainer, "temporary-build"),
+        "main container should not have a dangling temporary-build mount");
+    assertTrue(hasContainerMount(mainContainer, "dependency-cache"));
   }
 
   @Test
@@ -336,6 +345,10 @@ class PodMutatingWebhookTest {
             "--no-daemon",
             "quarkusDev"),
         mainContainer.getCommand());
+    assertFalse(
+        hasContainerMount(mainContainer, "dependency-cache"),
+        "main container should not have a dangling dependency-cache mount");
+    assertTrue(hasContainerMount(mainContainer, "project-source"));
   }
 
   @Test
@@ -356,6 +369,11 @@ class PodMutatingWebhookTest {
     var mainContainer = findContainer(mutated, MAIN_CONTAINER);
     assertEquals(List.of("npm", "run", "dev"), mainContainer.getCommand());
     assertEquals("/workspace", mainContainer.getWorkingDir());
+    // Only the unconditional init-scripts mount survives; no dangling PVC mounts.
+    assertFalse(hasContainerMount(mainContainer, "project-source"));
+    assertFalse(hasContainerMount(mainContainer, "dependency-cache"));
+    assertFalse(hasContainerMount(mainContainer, "temporary-build"));
+    assertTrue(hasContainerMount(mainContainer, "init-scripts"));
   }
 
   // -------------------- startup probe handling --------------------
@@ -398,19 +416,113 @@ class PodMutatingWebhookTest {
   }
 
   @Test
-  @DisplayName("no startup probe: mutation does not crash and does not add a probe")
-  void containerWithoutStartupProbeStaysWithoutStartupProbe() {
+  @DisplayName("no probes at all: mutation leaves the container without a startup probe")
+  void containerWithNoProbesStaysWithoutStartupProbe() {
     var appSpec = applicationSpec(ApplicationType.NODE_NPM);
 
     var mutated =
         webhook.mutatePod(
             inputPod(), appSpec, Optional.of(projectSource()), Optional.of(dependencyCache()));
 
-    var probe = findContainer(mutated, MAIN_CONTAINER).getStartupProbe();
-    // Current behavior: StartupProbe mutation only extends an existing probe, never adds one.
-    // If this changes (e.g. to add a default probe when the main container doesn't have one),
-    // update this test to assert the new contract.
-    assertEquals(null, probe, "no startup probe should be added if the container didn't have one");
+    // With no liveness probe there is no crash-loop risk during slow dev startup, so the
+    // webhook does not fabricate a probe out of thin air.
+    assertEquals(
+        null,
+        findContainer(mutated, MAIN_CONTAINER).getStartupProbe(),
+        "no startup probe should be added when the container has neither startup nor liveness probe");
+  }
+
+  @Test
+  @DisplayName(
+      "liveness httpGet probe: startup probe is derived with same handler + extended timeouts")
+  void livenessHttpProbeDerivesStartupProbe() {
+    var appSpec = applicationSpec(ApplicationType.SPRING_MAVEN);
+    var pod =
+        new PodBuilder()
+            .withNewMetadata()
+            .withName(APP_NAME)
+            .withNamespace(NAMESPACE)
+            .addToAnnotations("org.shadok/application", APP_NAME)
+            .endMetadata()
+            .withNewSpec()
+            .withContainers(
+                new ContainerBuilder()
+                    .withName(MAIN_CONTAINER)
+                    .withImage("example/app:1.0.0")
+                    .withLivenessProbe(
+                        new ProbeBuilder()
+                            .withNewHttpGet()
+                            .withPath("/actuator/health")
+                            .withNewPort(8080)
+                            .endHttpGet()
+                            .withInitialDelaySeconds(5)
+                            .withPeriodSeconds(5)
+                            .withFailureThreshold(3)
+                            .build())
+                    .build())
+            .endSpec()
+            .build();
+
+    var mutated =
+        webhook.mutatePod(
+            pod, appSpec, Optional.of(projectSource()), Optional.of(dependencyCache()));
+
+    var mainContainer = findContainer(mutated, MAIN_CONTAINER);
+    var startup = mainContainer.getStartupProbe();
+    assertNotNull(startup, "startup probe should be derived from the liveness probe");
+    assertNotNull(startup.getHttpGet(), "derived probe should reuse the liveness httpGet handler");
+    assertEquals("/actuator/health", startup.getHttpGet().getPath());
+    assertEquals(8080, startup.getHttpGet().getPort().getIntVal());
+    // Only the three timeout fields are overridden; the rest of the handler is preserved.
+    assertEquals(30, startup.getInitialDelaySeconds());
+    assertEquals(10, startup.getPeriodSeconds());
+    assertEquals(50, startup.getFailureThreshold());
+    // The original liveness probe is left untouched.
+    var liveness = mainContainer.getLivenessProbe();
+    assertNotNull(liveness);
+    assertEquals(5, liveness.getInitialDelaySeconds());
+    assertEquals(5, liveness.getPeriodSeconds());
+    assertEquals(3, liveness.getFailureThreshold());
+  }
+
+  @Test
+  @DisplayName("liveness exec probe: startup probe is derived with same exec command")
+  void livenessExecProbeDerivesStartupProbe() {
+    var appSpec = applicationSpec(ApplicationType.QUARKUS_GRADLE);
+    var pod =
+        new PodBuilder()
+            .withNewMetadata()
+            .withName(APP_NAME)
+            .withNamespace(NAMESPACE)
+            .addToAnnotations("org.shadok/application", APP_NAME)
+            .endMetadata()
+            .withNewSpec()
+            .withContainers(
+                new ContainerBuilder()
+                    .withName(MAIN_CONTAINER)
+                    .withImage("example/app:1.0.0")
+                    .withLivenessProbe(
+                        new ProbeBuilder()
+                            .withNewExec()
+                            .withCommand("cat", "/tmp/ready")
+                            .endExec()
+                            .withInitialDelaySeconds(2)
+                            .build())
+                    .build())
+            .endSpec()
+            .build();
+
+    var mutated =
+        webhook.mutatePod(
+            pod, appSpec, Optional.of(projectSource()), Optional.of(dependencyCache()));
+
+    var startup = findContainer(mutated, MAIN_CONTAINER).getStartupProbe();
+    assertNotNull(startup, "startup probe should be derived from the liveness exec probe");
+    assertNotNull(startup.getExec(), "derived probe should reuse the liveness exec handler");
+    assertEquals(List.of("cat", "/tmp/ready"), startup.getExec().getCommand());
+    assertEquals(30, startup.getInitialDelaySeconds());
+    assertEquals(10, startup.getPeriodSeconds());
+    assertEquals(50, startup.getFailureThreshold());
   }
 
   // ----------------------------- fixtures -----------------------------
@@ -586,6 +698,11 @@ class PodMutatingWebhookTest {
         readOnly,
         Boolean.TRUE.equals(mount.getReadOnly()),
         () -> "mount for " + volumeName + " readOnly flag mismatch");
+  }
+
+  private boolean hasContainerMount(Container container, String volumeName) {
+    var mounts = container.getVolumeMounts();
+    return mounts != null && mounts.stream().anyMatch(m -> volumeName.equals(m.getName()));
   }
 
   private VolumeMount findMount(Container container, String volumeName) {
