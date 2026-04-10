@@ -34,15 +34,22 @@ webhook:
 
 # This sets the container image, will be interpolated as {{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}
 # More information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+#
+# Note: registry / name / tag are placeholders filled in at build time by the
+# `copyHelm` Gradle task (see operator/build.gradle.kts). The rendered chart
+# lives in operator/build/chart/operator/ and that is what must be passed to
+# `helm install` -- not src/main/chart/operator/ directly.
 image:
   # This sets the image registry.
-  registry: $imageRegistry
+  registry: ${imageRegistry}
   # This sets the image name.
-  name: $imageName
-  # This sets the pull policy for images.
-  pullPolicy: Always
+  name: ${imageName}
+  # This sets the pull policy for images. IfNotPresent plays well with a local
+  # Kind registry where the image is loaded/pushed just before deploy; Always
+  # would force a re-pull from the registry every restart.
+  pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: $imageTag
+  tag: ${imageTag}
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -146,7 +153,7 @@ resources: {}
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 startupProbe:
   httpGet:
-    path: /q/health/stared
+    path: /q/health/started
     port: monitoring
   failureThreshold: 10
   initialDelaySeconds: 5
