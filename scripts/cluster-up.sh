@@ -27,6 +27,13 @@ CLUSTER_NAME="${CLUSTER_NAME:-shadok-dev}"
 REGISTRY_NAME="${REGISTRY_NAME:-kind-registry}"
 REGISTRY_PORT="${REGISTRY_PORT:-5001}"
 CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.16.2}"
+# Pin the Kind node image. Kind's default "latest" node image currently ships
+# with containerd v2.2.0, which has an incompatible CRI API surface and makes
+# kubeadm init hang forever with
+#   "unknown service runtime.v1.RuntimeService".
+# v1.34.0 still ships a compatible containerd v1.x and works cleanly with
+# Kind v0.31 on darwin/arm64.
+KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.34.0}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -95,8 +102,8 @@ if kind get clusters 2>/dev/null | grep -qx "${CLUSTER_NAME}"; then
 fi
 
 if ! kind get clusters 2>/dev/null | grep -qx "${CLUSTER_NAME}"; then
-  log "creating Kind cluster '${CLUSTER_NAME}'"
-  cat <<EOF | kind create cluster --name "${CLUSTER_NAME}" --config=-
+  log "creating Kind cluster '${CLUSTER_NAME}' (image: ${KIND_NODE_IMAGE})"
+  cat <<EOF | kind create cluster --name "${CLUSTER_NAME}" --image "${KIND_NODE_IMAGE}" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 containerdConfigPatches:
