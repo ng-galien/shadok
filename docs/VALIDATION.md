@@ -52,4 +52,4 @@ The final local bundle in `/tmp/shadok-release-final` compiled all four CLI targ
 
 ## Current publication status
 
-Remote verification passed on commits `9333972` and `fa04d9c`, including real Kind chart lifecycle and baseline synchronization/restoration. The 1.0.0 release is authorized for publication. Registry consumption is a separate gate: run the release smoke procedure in [INSTALL_RELEASE.md](INSTALL_RELEASE.md) after publication, then record the actual result.
+Remote verification passed on commits `9333972` and `fa04d9c`, including real Kind chart lifecycle and baseline synchronization/restoration. Version 1.0.0 is published and the fresh Kind test using anonymous GitHub/GHCR downloads passed. See the [release consumer report](releases/1.0.0-validation.md) and [installation guide](INSTALL_RELEASE.md).

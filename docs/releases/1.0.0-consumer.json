@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "chart": "oci://ghcr.io/ng-galien/shadok/charts/shadok",
+  "cliSHA256": "d21bd31c87b752b585e15ffa74525ee23237e355a10e4ceae6b8a3290de0598e",
+  "images": [
+    {
+      "pod": "baseline-565bfb8b89-64qbl",
+      "image": "ghcr.io/ng-galien/shadok/tools:1.0.0",
+      "imageID": "ghcr.io/ng-galien/shadok/tools@sha256:68f3e516712939c1bbe19ecd255b37a059152b02f9f57e732fe8223b3fbd4b48"
+    },
+    {
+      "pod": "baseline-565bfb8b89-bhjpl",
+      "image": "ghcr.io/ng-galien/shadok/tools:1.0.0",
+      "imageID": "ghcr.io/ng-galien/shadok/tools@sha256:68f3e516712939c1bbe19ecd255b37a059152b02f9f57e732fe8223b3fbd4b48"
+    },
+    {
+      "pod": "baseline-565bfb8b89-fjt5s",
+      "image": "ghcr.io/ng-galien/shadok/tools:1.0.0",
+      "imageID": "ghcr.io/ng-galien/shadok/tools@sha256:68f3e516712939c1bbe19ecd255b37a059152b02f9f57e732fe8223b3fbd4b48"
+    },
+    {
+      "pod": "runtime-shadok-5474fcf986-cjjb5",
+      "image": "ghcr.io/ng-galien/shadok/operator:1.0.0",
+      "imageID": "ghcr.io/ng-galien/shadok/operator@sha256:27fbc5a7d19f5d539d40f3991e609e1c925ec86aea9e650bcb38ab372e7953e6"
+    },
+    {
+      "pod": "runtime-shadok-gateway-d5ffbc6bb-mbjqq",
+      "image": "ghcr.io/ng-galien/shadok/gateway:1.0.0",
+      "imageID": "ghcr.io/ng-galien/shadok/gateway@sha256:02a8d31ca6d2fc67fc5745a38c4c830e531efd61de758f26e6e5bb58aae22e0a"
+    }
+  ],
+  "checks": [
+    "anonymous CLI and chart download",
+    "checksum verification",
+    "fresh Kind registry installation",
+    "HTTPS direct NodePort",
+    "CR-only identity",
+    "two-replica sync",
+    "add/delete",
+    "pod replacement",
+    "exact restoration",
+    "helm test",
+    "failed build preserves last revision",
+    "successful build publication"
+  ],
+  "date": "2026-09-10",
+  "kubernetes": "v1.36.1",
+  "kind": "0.32.0",
+  "nodeArchitecture": "arm64",
+  "cliPlatform": "darwin_arm64",
+  "chartDigest": "sha256:9774dafabf67bfa4b1b34784c7cdc4765e9a3a3dc5fa0ab8af01c2dd6ae9210d",
+  "sourceCommit": "42d0ab54b2808be84b2c97c852d540719ba3dec3",
+  "releaseWorkflow": "https://github.com/ng-galien/shadok/actions/runs/34455811262"
+}

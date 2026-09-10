@@ -38,3 +38,7 @@ After those decisions, follow [the distribution procedure](DISTRIBUTION.md), ver
 On 2026-09-10, the offline release contract suite passed (four tests), and actionlint v1.7.7 accepted the workflow. An actual `0.1.0-final-review` bundle using the deliberately non-published `example.invalid/shadok` prefix compiled all four CLI targets and passed strict chart lint. Its five distributable files and release manifest passed checksum verification. The native macOS ARM64 executable passed help, learn, chart export, and minimal skill install/status/uninstall. Its exported chart matched all 19 files and normalized metadata of the packaged chart, with correct versioned references for all three images and no Finder metadata. The installed skill contained only its routing Markdown and ownership manifest. Linux execution remains part of the workflow, not a local claim from cross-compilation alone. This was a historical local run; remote CI subsequently passed on `9333972` and `fa04d9c`.
 
 The subsequent 1.0.0 packaging update includes the MIT license in CLI archives, the chart and runtime images; the chart therefore now contains 20 maintained files. The earlier 19-file parity observation above predates that addition.
+
+## Published 1.0.0
+
+The release workflow and anonymous registry consumer validation passed on 2026-09-10. See the [consumer report](releases/1.0.0-validation.md) for checks, digests, platform scope and the resolved test infrastructure failures.

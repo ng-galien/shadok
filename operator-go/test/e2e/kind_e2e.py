@@ -81,10 +81,15 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
         line=proc.stdout.readline();m=re.search(r'127.0.0.1:(\d+)',line);assert m,(line,proc.stderr.read());return int(m.group(1))
     gateway='https://localhost:'+str(forward(SYSTEM,'service/runtime-shadok',80));tls=ssl.create_default_context(cafile=str(cert))
     def unavailable(path):
+        global gateway
         try:urllib.request.urlopen(urllib.request.Request(gateway+path+'/plan',b'{}'),context=tls,timeout=5)
         except urllib.error.HTTPError as e:return e.code in (404,409)
+        except (urllib.error.URLError,TimeoutError,ConnectionError):
+            gateway='https://localhost:'+str(forward(SYSTEM,'service/runtime-shadok',80))
+            return False
         return False
-    assert unavailable('/'+NS+'/'+name),'inactive target accepted';assert unavailable('/'+NS+'/absent'),'absent target accepted';assert unavailable('/other-namespace/'+name),'cross-namespace target accepted'
+    for path in ('/'+NS+'/'+name,'/'+NS+'/absent','/other-namespace/'+name):
+        wait(lambda:unavailable(path),'gateway must reject inactive/missing/cross-namespace target '+path)
     # Only the CR is changed by the developer operation.
     toggle(True)
     wait(lambda:get('deployment',name)['spec']['template']['metadata'].get('annotations',{}).get('shadok.org/live-session'),'live transformation')
@@ -100,7 +105,7 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
             src=work/('target/classes' if stack=='spring' else 'dist');subprocess.run(['mvn','-q','compile'] if stack=='spring' else ['npm','run','build'],cwd=work,check=True)
         else:shutil.copytree(demo/'src',src,dirs_exist_ok=True)
     else:(src/'index.html').write_text('synchronized-v1\n')
-    config=base/'config.json';config.write_text(json.dumps({'version':1,'groups':{'live':{'mode':'build' if stack in ('spring','ts') else 'watch','roots':[{'mount':mount,'path':str(src),'exclude':['**/__pycache__/**','**/*.pyc']}]}}}))
+    config=base/'config.json';config.write_text(json.dumps({'version':1,'groups':{'live':{'mode':'build' if RELEASE or stack in ('spring','ts') else 'watch','roots':[{'mount':mount,'path':str(src),'exclude':['**/__pycache__/**','**/*.pyc']}]}}}))
     # Daemon cannot obtain Kubernetes credentials from its environment.
     env=dict(os.environ,SHADOK_STATE_DIR=str(base/'daemon'),KUBECONFIG=str(base/'does-not-exist'))
     common=['--config',str(config),'--group','live','--url',gateway,'--namespace',NS,'--deployment',name,'--ca-file',str(cert),'--timeout','90s']
@@ -121,8 +126,14 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
         wait(attempt,'application response '+text,120)
     try:
         if stack=='baseline':expect('baseline')
-        print(cli('publish' if stack in ('spring','ts') else 'watch',*common).strip(),flush=True)
-        if stack=='baseline':expect('synchronized-v1');(src/'index.html').write_text('synchronized-v2\n');expected='synchronized-v2'
+        print(cli('publish' if RELEASE or stack in ('spring','ts') else 'watch',*common).strip(),flush=True)
+        if stack=='baseline':
+            expect('synchronized-v1');(src/'index.html').write_text('synchronized-v2\n');expected='synchronized-v2'
+            if RELEASE:
+                cli('build',*common,'--','sh','-c','exit 9',ok=False)
+                expect('synchronized-v1')
+                cli('build',*common,'--','sh','-c','exit 0')
+                print('PASS release build hook: failed build retained v1; successful build acknowledged v2',flush=True)
         elif stack in ('spring','ts'):
             f=work/('src/main/java/example/Application.java' if stack=='spring' else 'src/server.ts');f.write_text(f.read_text().replace(stack+'-baseline','shadok-live-change'))
             cli('build',*common,'--','sh','-c','exit 9',ok=False)
@@ -133,8 +144,10 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
         expect(expected)
         if stack=='baseline':
             (src/'added.txt').write_text('added')
+            if RELEASE:cli('publish',*common)
             wait(lambda:urllib.request.urlopen(app_url+'/added.txt',timeout=2).read()==b'added','addition')
             (src/'added.txt').unlink()
+            if RELEASE:cli('publish',*common)
             def deleted():
                 try:urllib.request.urlopen(app_url+'/added.txt',timeout=2)
                 except urllib.error.HTTPError as e:return e.code==404
@@ -151,7 +164,7 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
         toggle(False)
         wait(lambda:get('deployment',name)['spec']==original,'exact baseline restoration')
         kub('-n',NS,'rollout','status','deployment/'+name,'--timeout=120s')
-        assert unavailable('/'+NS+'/'+name),'disabled route accepted'
+        wait(lambda:unavailable('/'+NS+'/'+name),'disabled route must be rejected')
         print(f'PASS {stack}: Helm instance, HTTPS route, inactive/missing/isolation, live response, replacement, exact baseline restoration',flush=True)
     finally:
         # Restore the fixture even when synchronization or assertions fail.

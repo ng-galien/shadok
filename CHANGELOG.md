@@ -21,4 +21,4 @@ helm upgrade --install shadok oci://ghcr.io/ng-galien/shadok/charts/shadok \
   -f deployment-values.yaml --wait
 ```
 
-See [installation and Kind setup](https://github.com/ng-galien/shadok/blob/main/docs/INSTALL_RELEASE.md). Requires Helm 3/4 and Kubernetes 1.34+. Images support Linux AMD64/ARM64; CLI supports macOS/Linux AMD64/ARM64. Configure the gateway on a trusted network before syncing. Initial public registry availability and installation evidence are recorded after the first publication.
+See [installation and Kind setup](https://github.com/ng-galien/shadok/blob/main/docs/INSTALL_RELEASE.md). Requires Helm 3/4 and Kubernetes 1.34+. Images support Linux AMD64/ARM64; CLI supports macOS/Linux AMD64/ARM64. Configure the gateway on a trusted network before syncing. Public registry availability and fresh Kind installation are verified: see [consumer validation](https://github.com/ng-galien/shadok/blob/main/docs/releases/1.0.0-validation.md).

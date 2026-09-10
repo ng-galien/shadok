@@ -1,6 +1,6 @@
 # Install a published Shadok release
 
-This is the consumer path: no Go compiler or Shadok source build is required. Use an actually published version from [GitHub Releases](https://github.com/ng-galien/shadok/releases). Version 1.0.0 is the first release target; a prepared branch is not a downloadable release.
+This is the consumer path: no Go compiler or Shadok source build is required. Use an actually published version from [GitHub Releases](https://github.com/ng-galien/shadok/releases). Version 1.0.0 is published; its [fresh Kind consumer test passed](releases/1.0.0-validation.md).
 
 ## Download the CLI
 
@@ -54,10 +54,10 @@ Use `shadok build --config shadok.yaml --group service -- <build command>` on a 
 
 ## Maintainer: verify the published consumer path
 
-After a release, run from the repository using Python 3.12+, Helm, Docker, Kind and kubectl:
+After a release, run from the repository using Python 3.12+, curl, Helm, Docker, Kind and kubectl:
 
 ```sh
 python3 operator-go/test/e2e/release_smoke.py --version 1.0.0
 ```
 
-This downloads the CLI without GitHub credentials, verifies checksums, pulls the public chart using empty Helm credentials, creates a fresh `shadok-release-smoke` cluster with loopback port mappings, and installs Shadok from GHCR. It builds only the test application locally. It checks CR-only activation, two replicas, HTTPS synchronization, updates/deletions, pod replacement, exact restoration and Helm connectivity. No port-forward is used. The cluster is retained for inspection; the script refuses to reuse it. Evidence is written under the printed temporary consumer directory. Inspect it before explicitly deleting this disposable cluster and rerunning.
+This downloads the CLI without GitHub credentials, verifies checksums, pulls the public chart using empty Helm credentials, creates a fresh `shadok-release-smoke` cluster with loopback port mappings, and installs Shadok from GHCR. It builds only the test application locally. It checks CR-only activation, two replicas, HTTPS synchronization, failed/successful build publication, updates/deletions, pod replacement, exact restoration and Helm connectivity. No port-forward is used. The cluster is retained for inspection; the script refuses to reuse it. Evidence is written under the printed temporary consumer directory. Inspect it before explicitly deleting this disposable cluster and rerunning.
