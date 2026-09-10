@@ -1,0 +1,101 @@
+{{- if .Values.operator.enabled }}
+{{- if and (gt (int .Values.operator.replicas) 1) (not .Values.operator.leaderElection.enabled) }}{{ fail "operator.replicas > 1 requires leaderElection.enabled" }}{{ end }}
+{{- $root := . }}
+{{- range $component := list "operator" "gateway" }}
+{{- $v := index $root.Values $component }}
+{{- $ctx := dict "root" $root "component" $component }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shadok.componentName" $ctx }}
+  labels:
+    {{- include "shadok.labels" $ctx | nindent 4 }}
+  annotations:
+    {{- toYaml (mergeOverwrite (deepCopy $root.Values.commonAnnotations) $v.annotations) | nindent 4 }}
+spec:
+  {{- if or (eq $component "operator") (not $v.autoscaling.enabled) }}
+  replicas: {{ $v.replicas }}
+  {{- end }}
+  strategy: {{ toJson $v.strategy }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ include "shadok.componentName" $ctx }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml (mergeOverwrite (deepCopy $v.podLabels) (dict "app.kubernetes.io/instance" (include "shadok.componentName" $ctx) "app.kubernetes.io/component" $component "app.kubernetes.io/name" $root.Chart.Name)) | nindent 8 }}
+      annotations: {{ toJson $v.podAnnotations }}
+    spec:
+      serviceAccountName: {{ include "shadok.serviceAccount" $ctx }}
+      automountServiceAccountToken: {{ (index $root.Values.serviceAccounts $component).automountServiceAccountToken }}
+      imagePullSecrets: {{ toJson $root.Values.imagePullSecrets }}
+      securityContext: {{ toJson $v.podSecurityContext }}
+      terminationGracePeriodSeconds: {{ $v.terminationGracePeriodSeconds }}
+      {{- with $v.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      nodeSelector: {{ toJson $v.nodeSelector }}
+      tolerations: {{ toJson $v.tolerations }}
+      affinity: {{ toJson $v.affinity }}
+      topologySpreadConstraints: {{ toJson $v.topologySpreadConstraints }}
+      containers:
+        - name: {{ $component }}
+          image: {{ include "shadok.image" (dict "image" $v.image "defaultTag" $root.Chart.AppVersion) | quote }}
+          imagePullPolicy: {{ $v.imagePullPolicy }}
+          securityContext: {{ toJson $v.securityContext }}
+          args:
+            {{- if eq $component "operator" }}
+            - {{ printf "--tool-image=%s" (include "shadok.image" (dict "image" $v.toolImage "defaultTag" $root.Chart.AppVersion)) | quote }}
+            - {{ printf "--leader-elect=%t" $v.leaderElection.enabled | quote }}
+            - {{ printf "--leader-election-id=%s" $v.leaderElection.id | quote }}
+            - {{ printf "--leader-election-namespace=%s" $root.Release.Namespace | quote }}
+            - {{ printf "--watch-namespaces=%s" (join "," $v.watchNamespaces) | quote }}
+            {{- if $root.Values.metrics.enabled }}
+            - {{ printf "--metrics-bind-address=:%v" $root.Values.metrics.port | quote }}
+            {{- end }}
+            {{- else }}
+            - {{ printf "--watch-namespaces=%s" (join "," $root.Values.operator.watchNamespaces) | quote }}
+            {{- if $v.tlsSecretName }}
+            - --tls-cert=/tls/tls.crt
+            - --tls-key=/tls/tls.key
+            {{- end }}
+            {{- end }}
+            {{- with $v.extraArgs }}{{ toYaml . | nindent 12 }}{{ end }}
+          env: {{ toJson $v.extraEnv }}
+          envFrom: {{ toJson $v.envFrom }}
+          resources: {{ toJson $v.resources }}
+          {{- with $v.readinessProbe }}
+          readinessProbe: {{ toJson . }}
+          {{- end }}
+          {{- with $v.livenessProbe }}
+          livenessProbe: {{ toJson . }}
+          {{- end }}
+          {{- with $v.startupProbe }}
+          startupProbe: {{ toJson . }}
+          {{- end }}
+          ports:
+            {{- if eq $component "operator" }}
+            - {name: health, containerPort: 9000}
+            {{- if $root.Values.metrics.enabled }}
+            - {name: metrics, containerPort: {{ $root.Values.metrics.port }}}
+            {{- end }}
+            {{- else }}
+            - {name: sync, containerPort: 8080}
+            {{- end }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            {{- if and (eq $component "gateway") $v.tlsSecretName }}
+            - {name: gateway-tls, mountPath: /tls, readOnly: true}
+            {{- end }}
+            {{- with $v.extraVolumeMounts }}{{ toYaml . | nindent 12 }}{{ end }}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: {{ $v.tmpSizeLimit }}}
+        {{- if and (eq $component "gateway") $v.tlsSecretName }}
+        - name: gateway-tls
+          secret: {secretName: {{ $v.tlsSecretName | quote }}}
+        {{- end }}
+        {{- with $v.extraVolumes }}{{ toYaml . | nindent 8 }}{{ end }}
+{{- end }}
+{{- end }}

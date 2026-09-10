@@ -44,3 +44,13 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
     options.compilerArgs.add("-parameters")
 }
+
+// Optional CLI integration; never publishes an image or runs after a failed dependency.
+tasks.register<Exec>("shadokPublish") {
+    group = "development"
+    description = "Publish completed class/resource outputs to a Shadok session"
+    dependsOn(tasks.named("classes"), tasks.named("test"))
+    workingDir(rootProject.projectDir)
+    commandLine("shadok", "publish", "--config",
+        rootProject.file("shadok.yaml").absolutePath, "--group", "quarkus-outputs")
+}

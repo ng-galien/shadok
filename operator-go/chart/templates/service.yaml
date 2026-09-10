@@ -1,0 +1,33 @@
+{{- if .Values.operator.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "shadok.name" . }}
+  labels: {{ toJson (mergeOverwrite (deepCopy .Values.commonLabels) .Values.service.labels) }}
+  annotations: {{ toJson (mergeOverwrite (deepCopy .Values.commonAnnotations) .Values.service.annotations) }}
+spec:
+  type: {{ .Values.service.type }}
+  selector: {app.kubernetes.io/instance: {{ include "shadok.name" . }}-gateway}
+  {{- with .Values.service.clusterIP }}
+  clusterIP: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.service.loadBalancerClass }}
+  loadBalancerClass: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges: {{ toJson . }}
+  {{- end }}
+  {{- with .Values.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ . }}
+  {{- end }}
+  {{- with .Values.service.internalTrafficPolicy }}
+  internalTrafficPolicy: {{ . }}
+  {{- end }}
+  ports:
+    - name: sync
+      port: {{ .Values.service.port }}
+      targetPort: sync
+      {{- with .Values.service.nodePort }}
+      nodePort: {{ . }}
+      {{- end }}
+{{- end }}

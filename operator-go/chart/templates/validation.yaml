@@ -1,0 +1,5 @@
+{{- if and .Values.operator.enabled .Values.metrics.serviceMonitor.enabled (not .Values.metrics.enabled) }}{{ fail "ServiceMonitor requires metrics.enabled" }}{{ end }}
+{{- if and (eq .Values.service.type "ClusterIP") (or .Values.service.nodePort .Values.service.externalTrafficPolicy .Values.service.loadBalancerClass .Values.service.loadBalancerSourceRanges) }}{{ fail "ClusterIP does not support nodePort or external/load-balancer settings" }}{{ end }}
+{{- if and (ne .Values.service.type "LoadBalancer") (or .Values.service.loadBalancerClass .Values.service.loadBalancerSourceRanges) }}{{ fail "load-balancer settings require service.type=LoadBalancer" }}{{ end }}
+{{- if and .Values.gateway.autoscaling.enabled .Values.gateway.autoscaling.targetCPUUtilizationPercentage (not .Values.gateway.resources.requests.cpu) }}{{ fail "CPU autoscaling requires gateway.resources.requests.cpu" }}{{ end }}
+{{- if and .Values.gateway.autoscaling.enabled .Values.gateway.autoscaling.targetMemoryUtilizationPercentage (not .Values.gateway.resources.requests.memory) }}{{ fail "memory autoscaling requires gateway.resources.requests.memory" }}{{ end }}

@@ -1,80 +1,16 @@
-# Pods
+# Application examples
 
-Ce répertoire contient les applications de démonstration pour différents
-langages et frameworks, utilisées pour tester la plateforme Shadok.
+These applications demonstrate language-specific build and reload commands. Shadok itself uses the same generic session and file synchronization contract for every application.
 
-## Applications disponibles
+| Example | Workflow |
+| --- | --- |
+| [Node](node-hello/README.md) | Express source with nodemon and npm hooks |
+| [Python](python-hello/README.md) | FastAPI with uvicorn source reload and pytest |
+| [TypeScript](ts-hello/README.md) | Compile to `dist`, then publish successful output |
+| [Vite](vite-hello/README.md) | Serve frontend sources in development mode |
+| [Spring](spring-hello/README.md) | Compile JVM classes, publish through Maven, reload with DevTools |
+| [Quarkus](quarkus-hello/README.md) | JVM application and Gradle build hook |
 
-### Quarkus Hello (`quarkus-hello/`)
+Use `shadok learn` for the complete operating workflow and build examples. The repository's application tests cover file publication and application responses; browser HMR and remote Quarkus dev mode require separate verification.
 
-Une application Quarkus simple qui démontre :
-
-- REST API avec JAX-RS
-- Intégration Kubernetes native
-- Container Image avec Jib
-- Live Reload pour le développement
-- Health Checks
-
-**Endpoints** :
-
-- `GET /hello` - Message Hello World en texte
-- `GET /hello/json` - Message Hello World en JSON
-- `GET /q/health` - Health check
-
-**Démarrage rapide** :
-
-```bash
-cd quarkus-hello
-./start.sh dev
-```
-
-### Python Hello (`python-hello/`)
-
-Une application Python FastAPI simple qui démontre :
-
-- REST API avec FastAPI
-- Documentation Swagger/OpenAPI automatique
-- Container Image optimisé Alpine
-- Live Reload pour le développement
-- Health Checks et tests pytest
-
-**Endpoints** :
-
-- `GET /hello` - Message Hello World en texte
-- `GET /hello/json` - Message Hello World en JSON
-- `GET /health` - Health check
-- `GET /docs` - Documentation Swagger
-
-**Démarrage rapide** :
-
-```bash
-cd python-hello
-./start.sh dev
-```
-
-## Applications futures
-
-- **Spring Boot** - Application Spring Boot avec actuator
-- **Node.js** - Application Express.js
-- **Go** - Application avec Gin
-- **.NET** - Application ASP.NET Core
-
-## Structure type d'une application pod
-
-Chaque application pod doit contenir :
-
-1. **Code source** dans une structure standard pour le langage
-2. **Configuration Kubernetes** (natif ou via manifests)
-3. **Dockerfile** pour la containerisation
-4. **README.md** avec instructions de démarrage
-5. **Script de démarrage** (`start.sh` ou équivalent)
-6. **Tests** unitaires et d'intégration
-
-## Intégration avec Shadok
-
-Toutes les applications sont conçues pour être compatibles avec :
-
-- **Live Reload** - Rechargement automatique du code
-- **Cache de dépendances** - Partage `.m2`, `node_modules`, etc.
-- **Déploiement dynamique** - Sans pipeline CI/CD
-- **Surveillance** - Redémarrage intelligent des pods
+A demo should keep its source, application build configuration, runtime image, tests and usage guide together. Application images must provide the selected reload tool and command. The platform Deployment owns secrets, environment, resource settings and image pull credentials; the session selects the container and mounted directories.

@@ -1,0 +1,27 @@
+{{- if .Values.session.create }}
+apiVersion: shadok.org/v1alpha1
+kind: DevelopmentSession
+metadata:
+  name: {{ .Values.session.name }}
+  namespace: {{ default .Release.Namespace .Values.session.namespace }}
+  labels: {{ toJson (mergeOverwrite (deepCopy .Values.commonLabels) .Values.session.labels) }}
+  annotations: {{ toJson (mergeOverwrite (deepCopy .Values.commonAnnotations) .Values.session.annotations) }}
+spec:
+  enabled: {{ .Values.session.enabled }}
+  deployment: {{ required "session.deployment must name an existing Deployment" .Values.session.deployment | quote }}
+  container: {{ .Values.session.container | quote }}
+  {{- with .Values.session.image }}
+  image: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.session.imagePullPolicy }}
+  imagePullPolicy: {{ . | quote }}
+  {{- end }}
+  runAsUser: {{ .Values.session.runAsUser }}
+  runAsGroup: {{ .Values.session.runAsGroup }}
+  directories:
+    {{- required "session.directories must define at least one live directory" .Values.session.directories | toYaml | nindent 4 }}
+  start:
+    command: {{ required "session.start.command must define the live command" .Values.session.start.command | toJson }}
+    args: {{ .Values.session.start.args | toJson }}
+    workingDir: {{ .Values.session.start.workingDir | quote }}
+{{- end }}

@@ -1,0 +1,14 @@
+{
+  "name": "shadok-vite-hello",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 8080",
+    "build": "vite build",
+    "dev:cluster": "shadok watch --config shadok.yaml --group source"
+  },
+  "devDependencies": {
+    "vite": "^6.4.3"
+  }
+}

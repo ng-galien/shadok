@@ -1,156 +1,45 @@
 # Shadok
 
-**Shadok** (Simple Hypervisor for Artifact Delivery On Kubernetes) est une
-plateforme conçue pour déployer et exécuter des applications en **live reload**
-directement depuis leur code source, sans passer par un pipeline CI/CD
-classique.
+Shadok enables live development on an **existing Kubernetes Deployment**. The Go operator saves its original Pod template, injects temporary directories and a synchronization receiver, and restores the template when the session ends. Existing Services and routing remain usable.
 
-Il permet aux développeurs de travailler de manière interactive dans un cluster
-Kubernetes en synchronisant les sources, en gérant les dépendances partagées, et
-en assurant le redémarrage conditionnel des pods si nécessaire.
+`DevelopmentSession` describes a container, directories, a start command, and an optional development image. Runtime and framework behavior belongs to the application image, not an operator language catalog. The CLI and daemon send files over HTTP(S) through the gateway; builds remain local and failed builds are not published. The daemon requires no Kubernetes credentials.
 
----
+## Start with the binary
 
-## ✨ Objectifs
-
-- Déployer dynamiquement une application à partir de ses **sources (locales ou
-  Git)**.
-- Exécuter l'application avec un **runtime live reload** (Spring, Quarkus, Node,
-  Python, etc.).
-- Partager un **cache de dépendances** (`.m2`, `node_modules`, `venv`, etc.).
-- Éviter tout déclenchement de pipeline CI/CD.
-- Surveiller les changements et **redémarrer les pods intelligemment** si
-  nécessaire.
-
----
-
-## 🧪 Applications de démonstration
-
-Le projet inclut des applications d'exemple pour tester Shadok avec différents
-langages :
-
-### 🎯 Commandes rapides
-
-```bash
-# Voir le statut de tous les pods
-./gradlew podsStatus
-
-# Tester tous les pods
-./gradlew testAllPods
-
-# Construire tous les pods
-./gradlew buildAllPods
-
-# Configuration complète
-./gradlew setupAllPods
+```sh
+shadok --help
+shadok learn
+shadok docs install
 ```
 
-### ⚡ Pod Quarkus (Java)
+Operational guidance is embedded in the executable. It covers cluster installation, configuration, source watching, successful-build hooks, verification, troubleshooting and restoration. Use `shadok chart export ./shadok-chart` to materialize the bundled chart without a source checkout. Registry images must be explicitly selected from a release you trust; documentation does not assume an unpublished public registry exists.
 
-Application Quarkus 3.8.1 avec intégration Kubernetes native.
+## Develop and verify
 
-```bash
-# Construire le pod Quarkus
-./gradlew buildQuarkusPod
+Requires Go 1.26+, Helm and Docker. Kind and kubectl are needed for Kubernetes integration tests.
 
-# Lancer en mode dev (live reload)
-./gradlew runQuarkusDev
-
-# Générer les manifestes Kubernetes
-./gradlew generateQuarkusK8s
-
-# URL locale: http://localhost:8080
+```sh
+make -C operator-go generate verify
+make -C operator-go chart-test
+make -C operator-go local-e2e
+make -C operator-go generic-images
+./scripts/cluster-up.sh
+./scripts/deploy-operator.sh
 ```
 
-**Endpoints disponibles :**
+The local scripts explicitly target `shadok-go-e2e`; they preserve an existing cluster and do not install demo applications implicitly.
 
-- `GET /hello` - Message de bienvenue en texte
-- `GET /hello/json` - Message de bienvenue en JSON
-- `GET /q/health` - Health check Quarkus
+## Repository guides
 
-### 🐍 Pod Python (FastAPI)
+- [CLI and operator overview](operator-go/README.md)
+- [Helm chart configuration and lifecycle](operator-go/chart/README.md)
+- [Packaging and distribution](docs/DISTRIBUTION.md)
+- [Operator review](docs/OPERATOR_REVIEW.md)
+- [Validation evidence](docs/VALIDATION.md)
+- [Local HTTPS ingress integration](docs/LOCAL_INGRESS.md)
+- [Daemon and build contract](docs/DAEMON_BUILD_CONTRACT.md)
+- [Application examples](pods/README.md)
 
-Application FastAPI avec documentation automatique OpenAPI.
+The API is `v1alpha1`. Protect the gateway through a trusted network or an authenticated ingress; built-in writer authentication is not implemented. File synchronization acknowledgements and application reload verification are separate checks. Local validation does not imply a published release.
 
-```bash
-# Configurer l'environnement Python
-./gradlew setupPython
-
-# Lancer en mode dev (live reload)
-./gradlew runPythonDev
-
-# Construire l'image Docker
-./gradlew buildPythonImage
-
-# URL locale: http://localhost:8000
-```
-
-**Endpoints disponibles :**
-
-- `GET /hello` - Message de bienvenue en texte
-- `GET /hello/json` - Message de bienvenue en JSON
-- `GET /health` - Health check
-- `GET /docs` - Documentation interactive Swagger
-
-### 📋 Tâches disponibles
-
-```bash
-# Python
-./gradlew tasks --group python-pods
-
-# Quarkus
-./gradlew tasks --group quarkus-pods
-
-# Toutes les tâches pods
-./gradlew tasks --group pods
-```
-
-### Applications futures
-
-- **Spring Boot** - Application avec Spring Boot Actuator
-- **Node.js** - Application Express.js
-- **Go** - Application avec Gin
-- **.NET** - Application ASP.NET Core
-
----
-
-## 🐳 Environnement de développement Kubernetes
-
-Shadok inclut un environnement de développement Kubernetes complet basé sur
-**kind** (Kubernetes in Docker) avec registry locale intégrée.
-
-### 🚀 Démarrage rapide
-
-```bash
-# Démarrer l'environnement kind complet
-./k8s/start-kind.sh
-
-# Vérifier le statut
-./k8s/status-kind.sh
-
-# Arrêter l'environnement
-./k8s/stop-kind.sh
-```
-
-### ✨ Fonctionnalités
-
-- **Cluster multi-node** : 1 control-plane + 2 workers
-- **Registry locale** sur `localhost:5001`
-- **Mirror GitHub** configuré pour `ghcr.io`
-- **Ingress Controller** NGINX préinstallé
-- **Scripts idempotents** pour un environnement reproductible
-
-### 📦 Utilisation avec les pods
-
-```bash
-# Construire et pousser une image locale
-docker build -t localhost:5001/shadok/quarkus-hello:latest pods/quarkus-hello/
-docker push localhost:5001/shadok/quarkus-hello:latest
-
-# Déployer dans le cluster kind
-kubectl apply -f pods/quarkus-hello/k8s/
-```
-
-Pour plus de détails, voir [k8s/README.md](k8s/README.md).
-
----
+Shadok is licensed under the [MIT License](LICENSE).

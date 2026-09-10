@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Namespace
+metadata: {name: shadok-e2e}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: baseline, namespace: shadok-e2e}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: baseline}
+  template:
+    metadata:
+      labels: {app: baseline}
+    spec:
+      containers:
+        - name: app
+          image: shadok-baseline:local
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 8080}]
+          env: [{name: PRESERVE_ME, value: baseline-config}]
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+---
+apiVersion: shadok.org/v1alpha1
+kind: DevelopmentSession
+metadata: {name: sample, namespace: shadok-e2e}
+spec:
+  deployment: baseline
+  container: app
+  runAsUser: 1000
+  runAsGroup: 1000
+  directories:
+    - name: application
+      imagePath: /app
+      mountPath: /app
+  start:
+    command: [python]
+    args: [-m, http.server, "8080", --directory, /app]

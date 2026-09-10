@@ -1,0 +1,21 @@
+{{- if and .Values.operator.enabled .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "shadok.name" . }}-connection-test
+  labels: {{ toJson .Values.commonLabels }}
+  annotations:
+    {{- toYaml (mergeOverwrite (deepCopy .Values.commonAnnotations) (dict "helm.sh/hook" "test" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded")) | nindent 4 }}
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+  imagePullSecrets: {{ toJson .Values.imagePullSecrets }}
+  containers:
+    - name: connection
+      image: {{ include "shadok.image" (dict "image" .Values.tests.image "defaultTag" .Chart.AppVersion) | quote }}
+      command: [sh, -ec]
+      args: [{{ printf "nc -z -w 10 %s %v" (include "shadok.name" .) .Values.service.port | quote }}]
+      securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+      resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {cpu: 100m, memory: 32Mi}}
+{{- end }}

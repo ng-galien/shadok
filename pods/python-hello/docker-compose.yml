@@ -19,4 +19,4 @@ services:
       - "app.kubernetes.io/name=python-hello"
       - "app.kubernetes.io/part-of=shadok-pods"
     volumes:
-      - "./src:/app/src"  # Pour le live reload en développement
+      - "./src:/app/src"  # Enable development live reload

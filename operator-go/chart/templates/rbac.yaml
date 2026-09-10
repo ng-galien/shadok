@@ -1,0 +1,103 @@
+{{- if .Values.operator.enabled }}
+{{- $root := . }}
+{{- range $component := list "operator" "gateway" }}
+{{- $ctx := dict "root" $root "component" $component }}
+{{- $account := index $root.Values.serviceAccounts $component }}
+{{- if $account.create }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "shadok.serviceAccount" $ctx }}
+  labels: {{ toJson (mergeOverwrite (deepCopy $root.Values.commonLabels) $account.labels) }}
+  annotations: {{ toJson (mergeOverwrite (deepCopy $root.Values.commonAnnotations) $account.annotations) }}
+automountServiceAccountToken: {{ $account.automountServiceAccountToken }}
+{{- end }}
+{{- if $root.Values.rbac.create }}
+{{- $namespaces := $root.Values.operator.watchNamespaces }}
+{{- $cluster := not $namespaces }}
+{{- if $cluster }}{{ $namespaces = list $root.Release.Namespace }}{{ end }}
+{{- range $namespace := $namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: {{ if $cluster }}ClusterRole{{ else }}Role{{ end }}
+metadata:
+  name: {{ include "shadok.componentName" $ctx }}{{ if $cluster }}-{{ $root.Release.Namespace }}{{ end }}
+  {{- if not $cluster }}
+  namespace: {{ $namespace }}
+  {{- end }}
+  annotations: {{ toJson $root.Values.commonAnnotations }}
+  labels:
+    {{- include "shadok.labels" $ctx | nindent 4 }}
+rules:
+  - apiGroups: [shadok.org]
+    resources: [developmentsessions]
+    verbs: [get, list, watch{{ if eq $component "operator" }}, update, patch{{ end }}]
+  {{- if eq $component "operator" }}
+  - apiGroups: [shadok.org]
+    resources: [developmentsessions/status, developmentsessions/finalizers]
+    verbs: [get, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, watch, patch]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, list, watch, create, update, patch, delete]
+  {{- else }}
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: {{ if $cluster }}ClusterRoleBinding{{ else }}RoleBinding{{ end }}
+metadata:
+  name: {{ include "shadok.componentName" $ctx }}{{ if $cluster }}-{{ $root.Release.Namespace }}{{ end }}
+  {{- if not $cluster }}
+  namespace: {{ $namespace }}
+  {{- end }}
+  labels: {{ toJson $root.Values.commonLabels }}
+  annotations: {{ toJson $root.Values.commonAnnotations }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "shadok.serviceAccount" $ctx }}
+    namespace: {{ $root.Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: {{ if $cluster }}ClusterRole{{ else }}Role{{ end }}
+  name: {{ include "shadok.componentName" $ctx }}{{ if $cluster }}-{{ $root.Release.Namespace }}{{ end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if and .Values.rbac.create .Values.operator.leaderElection.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "shadok.name" . }}-leader
+  labels: {{ toJson .Values.commonLabels }}
+  annotations: {{ toJson .Values.commonAnnotations }}
+rules:
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "shadok.name" . }}-leader
+  labels: {{ toJson $root.Values.commonLabels }}
+  annotations: {{ toJson $root.Values.commonAnnotations }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "shadok.serviceAccount" (dict "root" . "component" "operator") }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "shadok.name" . }}-leader
+{{- end }}
+{{- end }}

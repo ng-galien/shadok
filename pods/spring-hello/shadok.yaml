@@ -1,0 +1,8 @@
+version: 1
+project: spring-hello
+groups:
+  service:
+    mode: build
+    roots:
+      - mount: classes
+        path: target/classes

@@ -1,1 +1,1 @@
-# Tests pour Python Hello World Pod
+# Tests for Python Hello World Pod

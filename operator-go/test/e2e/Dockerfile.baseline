@@ -1,0 +1,6 @@
+FROM python:3.11-alpine
+WORKDIR /app
+RUN mkdir -p /app && printf 'baseline\n' > /app/index.html
+USER 1000:1000
+EXPOSE 8080
+CMD ["python", "-m", "http.server", "8080", "--directory", "/app"]

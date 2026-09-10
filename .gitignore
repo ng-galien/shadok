@@ -68,3 +68,15 @@ logs/
 *.so
 *.dll
 *.dylib
+
+# Go operator
+/operator-go/manager
+/operator-go/dist/
+**/node_modules/
+/pods/spring-hello/target/
+/pods/ts-hello/dist/
+/pods/vite-hello/dist/
+
+**/__pycache__/
+
+/dist/

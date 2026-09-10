@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 import sys
 import os
 
-# Ajouter le répertoire src au path
+# Add the src directory to the import path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from main import app
@@ -11,14 +11,14 @@ from main import app
 client = TestClient(app)
 
 def test_hello_text():
-    """Test de l'endpoint /hello en texte plain"""
+    """Test the plain-text greeting endpoint"""
     response = client.get("/hello")
     assert response.status_code == 200
     assert response.text == "Hello World from Python Pod!"
     assert response.headers["content-type"] == "text/plain; charset=utf-8"
 
 def test_hello_json():
-    """Test de l'endpoint /hello/json"""
+    """Test the JSON greeting endpoint"""
     response = client.get("/hello/json")
     assert response.status_code == 200
     
@@ -29,7 +29,7 @@ def test_hello_json():
     assert "timestamp" in json_data
 
 def test_health_check():
-    """Test de l'endpoint /health"""
+    """Test the health endpoint"""
     response = client.get("/health")
     assert response.status_code == 200
     
@@ -41,7 +41,7 @@ def test_health_check():
     assert json_data["uptime_seconds"] >= 0
 
 def test_root():
-    """Test de l'endpoint racine /"""
+    """Test the root endpoint"""
     response = client.get("/")
     assert response.status_code == 200
     
@@ -52,12 +52,12 @@ def test_root():
     assert json_data["health"] == "/health"
 
 def test_docs():
-    """Test que la documentation Swagger est accessible"""
+    """Check that Swagger documentation is accessible"""
     response = client.get("/docs")
     assert response.status_code == 200
 
 def test_openapi():
-    """Test que le schéma OpenAPI est accessible"""
+    """Check that the OpenAPI schema is accessible"""
     response = client.get("/openapi.json")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/json"

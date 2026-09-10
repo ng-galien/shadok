@@ -3,7 +3,7 @@ from typing import Optional
 import datetime
 
 class HelloResponse(BaseModel):
-    """Modèle de réponse pour l'endpoint /hello/json"""
+    """Response model for endpoint /hello/json"""
     message: str
     service: str
     version: str
@@ -12,7 +12,7 @@ class HelloResponse(BaseModel):
     namespace: Optional[str] = None
 
 class HealthResponse(BaseModel):
-    """Modèle de réponse pour l'endpoint /health"""
+    """Response model for endpoint /health"""
     status: str
     service: str
     version: str

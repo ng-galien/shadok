@@ -1,0 +1,97 @@
+name: Verify Go operator and Helm chart
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: operator-go/go.mod
+          cache-dependency-path: operator-go/go.sum
+      - name: Validate workflow syntax
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/*.yml
+      - name: Install checksum-verified Helm
+        shell: bash
+        run: |
+          curl -fsSLO https://get.helm.sh/helm-v4.2.4-linux-amd64.tar.gz
+          curl -fsSLO https://get.helm.sh/helm-v4.2.4-linux-amd64.tar.gz.sha256sum
+          sha256sum --check helm-v4.2.4-linux-amd64.tar.gz.sha256sum
+          tar -xzf helm-v4.2.4-linux-amd64.tar.gz
+          sudo install linux-amd64/helm /usr/local/bin/helm
+      - name: Generated API, race tests, build, vet and chart unit tests
+        run: |
+          cp operator-go/chart/crds/shadok.org_developmentsessions.yaml /tmp/crd-before.yaml
+          cp operator-go/api/v1alpha1/zz_generated.deepcopy.go /tmp/deepcopy-before.go
+          test -z "$(gofmt -l operator-go/assets.go operator-go/api operator-go/cmd operator-go/internal operator-go/test)"
+          make -C operator-go generate verify
+          cmp /tmp/crd-before.yaml operator-go/chart/crds/shadok.org_developmentsessions.yaml
+          cmp /tmp/deepcopy-before.go operator-go/api/v1alpha1/zz_generated.deepcopy.go
+          helm lint operator-go/chart --strict
+      - name: Local daemon integration
+        run: make -C operator-go local-e2e
+      - name: Prepare unpublished release bundle
+        run: python3 operator-go/scripts/package.py --version 1.0.0-ci --image-prefix example.invalid/shadok --output dist
+      - name: Verify packaged CLI and checksums
+        run: |
+          cd dist
+          sha256sum --check SHA256SUMS-1.0.0-ci
+          mkdir smoke
+          tar -xzf shadok_1.0.0-ci_linux_amd64.tar.gz -C smoke
+          test "$(smoke/shadok --version)" = "1.0.0-ci"
+          smoke/shadok learn > /tmp/shadok-learn.md
+          test -s /tmp/shadok-learn.md
+          smoke/shadok chart export smoke/chart
+          helm lint smoke/chart --strict
+          python3 ../operator-go/test/release/verify_chart_export.py shadok-1.0.0-ci.tgz smoke/chart
+          helm template smoke smoke/chart > /tmp/shadok-exported.yaml
+          grep -q 'example.invalid/shadok/operator:1.0.0-ci' /tmp/shadok-exported.yaml
+          smoke/shadok agent install --path "$RUNNER_TEMP/shadok-skill"
+          smoke/shadok agent status --path "$RUNNER_TEMP/shadok-skill"
+          smoke/shadok agent uninstall --path "$RUNNER_TEMP/shadok-skill"
+      - name: Retain unpublished review artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: shadok-review-${{ github.sha }}
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error
+      - name: Isolated Kind chart lifecycle
+        run: |
+          go install sigs.k8s.io/kind@v0.32.0
+          ./scripts/cluster-up.sh
+          make -C operator-go generic-images
+          for component in operator gateway tools; do
+            kind load docker-image --name shadok-go-e2e "shadok-${component}:local"
+          done
+          kubectl --kubeconfig /tmp/shadok-go-e2e.kubeconfig --context kind-shadok-go-e2e apply --server-side -f operator-go/chart/crds
+          python3 operator-go/test/e2e/chart_lifecycle.py
+      - name: Existing Deployment synchronization and restoration
+        run: |
+          docker build -t shadok-baseline:local -f operator-go/test/e2e/Dockerfile.baseline operator-go/test/e2e
+          kind load docker-image --name shadok-go-e2e shadok-baseline:local
+          python3 operator-go/test/e2e/kind_e2e.py --stack baseline
+      - name: Capture Kubernetes diagnostics
+        if: failure()
+        run: |
+          kubectl --kubeconfig /tmp/shadok-go-e2e.kubeconfig --context kind-shadok-go-e2e get pods,events -A || true
+          kind export logs /tmp/kind-logs --name shadok-go-e2e || true
+      - name: Retain Kubernetes diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: kind-diagnostics-${{ github.sha }}
+          path: /tmp/kind-logs
+          retention-days: 7
+          if-no-files-found: ignore

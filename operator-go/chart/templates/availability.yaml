@@ -1,0 +1,55 @@
+{{- if .Values.operator.enabled }}
+{{- $root := . }}
+{{- range $component := list "operator" "gateway" }}
+{{- $v := index $root.Values $component }}
+{{- if $v.pdb.enabled }}
+{{- if and (ne $v.pdb.minAvailable nil) (ne $v.pdb.maxUnavailable nil) }}{{ fail "PDB requires exactly one of minAvailable or maxUnavailable" }}{{ end }}
+{{- if and (eq $v.pdb.minAvailable nil) (eq $v.pdb.maxUnavailable nil) }}{{ fail "PDB requires minAvailable or maxUnavailable" }}{{ end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "shadok.componentName" (dict "root" $root "component" $component) }}
+  labels: {{ toJson $root.Values.commonLabels }}
+  annotations: {{ toJson $root.Values.commonAnnotations }}
+spec:
+  {{- if ne $v.pdb.minAvailable nil }}
+  minAvailable: {{ $v.pdb.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ $v.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ include "shadok.componentName" (dict "root" $root "component" $component) }}
+{{- end }}
+{{- end }}
+{{- with .Values.gateway.autoscaling }}
+{{- if .enabled }}
+{{- if gt (int .minReplicas) (int .maxReplicas) }}{{ fail "autoscaling.minReplicas exceeds maxReplicas" }}{{ end }}
+{{- if not (or .targetCPUUtilizationPercentage .targetMemoryUtilizationPercentage) }}{{ fail "autoscaling requires a CPU or memory target" }}{{ end }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "shadok.name" $root }}-gateway
+  labels: {{ toJson $root.Values.commonLabels }}
+  annotations: {{ toJson $root.Values.commonAnnotations }}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: {{ include "shadok.name" $root }}-gateway}
+  minReplicas: {{ .minReplicas }}
+  maxReplicas: {{ .maxReplicas }}
+  {{- with .behavior }}
+  behavior: {{ toJson . }}
+  {{- end }}
+  metrics:
+    {{- with .targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: {{ . }}}}
+    {{- end }}
+    {{- with .targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource: {name: memory, target: {type: Utilization, averageUtilization: {{ . }}}}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

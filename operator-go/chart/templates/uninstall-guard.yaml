@@ -1,0 +1,29 @@
+{{- if and .Values.operator.enabled .Values.uninstallGuard.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "shadok.name" . }}-uninstall-check
+  labels: {{ toJson .Values.commonLabels }}
+  annotations:
+    {{- toYaml (mergeOverwrite (deepCopy .Values.commonAnnotations) (dict "helm.sh/hook" "pre-delete" "helm.sh/hook-delete-policy" "before-hook-creation,hook-succeeded")) | nindent 4 }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.uninstallGuard.activeDeadlineSeconds }}
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "shadok.serviceAccount" (dict "root" . "component" "operator") }}
+      imagePullSecrets: {{ toJson .Values.imagePullSecrets }}
+      securityContext: {{ toJson .Values.operator.podSecurityContext }}
+      nodeSelector: {{ toJson .Values.operator.nodeSelector }}
+      tolerations: {{ toJson .Values.operator.tolerations }}
+      containers:
+        - name: check
+          image: {{ include "shadok.image" (dict "image" .Values.operator.image "defaultTag" .Chart.AppVersion) | quote }}
+          imagePullPolicy: {{ .Values.operator.imagePullPolicy }}
+          securityContext: {{ toJson .Values.operator.securityContext }}
+          resources: {{ toJson .Values.operator.resources }}
+          args:
+            - --check-uninstall
+            - {{ printf "--watch-namespaces=%s" (join "," .Values.operator.watchNamespaces) | quote }}
+{{- end }}

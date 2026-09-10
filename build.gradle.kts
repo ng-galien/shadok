@@ -1,26 +1,11 @@
 plugins {
-    `java-platform`
+    base
     alias(libs.plugins.spotless)
 }
 
-description = "Shadok Parent - BOM for dependency management"
+description = "Shadok application demos and development tooling"
 
-javaPlatform {
-    allowDependencies()
-}
-
-dependencies {
-    // Import external BOMs
-    api(platform(libs.quarkus.bom))
-    api(platform(libs.quarkus.operator.sdk.bom))
-
-    constraints {
-        // Additional dependencies
-        api(libs.kubernetes.webhooks.core)
-    }
-}
-
-// Configuration Spotless pour le projet racine
+// Root project Spotless configuration
 configure<com.diffplug.gradle.spotless.SpotlessExtension> {
     format("markdown") {
         target("*.md")
@@ -82,31 +67,31 @@ subprojects {
             ))
         }
         
-        // Configuration Dockerfile
+        // Dockerfile formatting
         format("dockerfile") {
             target("**/Dockerfile*")
             targetExclude("**/venv/**", "**/node_modules/**", "**/build/**", "**/target/**")
-            // Formatage basique pour les Dockerfiles
+            // Basic Dockerfile formatting
             indentWithSpaces(4)
             trimTrailingWhitespace()
             endWithNewline()
         }
         
-        // Configuration scripts shell
+        // Shell script formatting
         format("shell") {
             target("**/*.sh")
             targetExclude("**/venv/**", "**/node_modules/**", "**/build/**", "**/target/**")
-            // Formatage basique pour les scripts shell
+            // Basic shell script formatting
             indentWithSpaces(2)
             trimTrailingWhitespace()
             endWithNewline()
         }
         
-        // Configuration TOML simplifiée (sans prettier pour éviter les dépendances)
+        // Basic TOML formatting without additional formatter dependencies
         format("toml") {
             target("**/*.toml")
             targetExclude("**/venv/**", "**/node_modules/**", "**/build/**", "**/target/**")
-            // Utilise un formatteur simple pour la cohérence d'indentation
+            // Use consistent indentation
             indentWithSpaces(2)
             trimTrailingWhitespace()
             endWithNewline()
@@ -120,24 +105,6 @@ subprojects {
     }
 }
 
-val envProfile: String = (findProperty("env") as String?) ?: "prod"
-
-project(":operator") {
-    group = "io.shadok"
-    description = "Shadok Kubernetes Live Development Operator"
-    extra["chartName"] = "shadok-operator"
-    extra["chartVersion"] = "1.0.0"
-    extra["chartDescription"] = "Chart for Shadok Kubernetes Live Development Operator"
-    extra["imageName"] = "shadok-operator"
-    extra["imageRegistry"] = when (envProfile) {
-        "kind" -> "localhost:5001"
-        else   -> "docker.io"
-    }
-    extra["imageTag"] = when (envProfile) {
-        "kind" -> "latest"
-        else   -> project.version.toString()
-    }
-}
 // =========================
 // Python Pods Management
 // =========================

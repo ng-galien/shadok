@@ -1,0 +1,10 @@
+# Apply this Role in the application's namespace, then bind it to the developer identity.
+# The platform creates the configured DevelopmentSession through Helm.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: shadok-developer
+rules:
+  - apiGroups: [shadok.org]
+    resources: [developmentsessions]
+    verbs: [get, list, watch, patch, update]

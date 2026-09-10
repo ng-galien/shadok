@@ -2,7 +2,7 @@ import os
 from typing import Optional
 
 class Config:
-    """Configuration de l'application"""
+    """Application configuration"""
     
     # Serveur
     HOST: str = os.getenv("HOST", "0.0.0.0")
@@ -11,7 +11,7 @@ class Config:
     # Application
     APP_NAME: str = "python-hello"
     APP_VERSION: str = "1.0.0-SNAPSHOT"
-    APP_DESCRIPTION: str = "Python Hello World Pod pour Shadok"
+    APP_DESCRIPTION: str = "Python Hello World Pod for Shadok"
     
     # Debug
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"

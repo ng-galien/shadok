@@ -6,12 +6,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Middleware de sécurité
+// Security middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// Route de base
+// Root route
 app.get('/', (req, res) => {
   res.json({
     message: 'Hello from Node.js!',
@@ -22,12 +22,12 @@ app.get('/', (req, res) => {
   });
 });
 
-// Route hello simple
+// Plain-text greeting route
 app.get('/hello', (req, res) => {
   res.send('Hello World from Node.js Express server! 🚀');
 });
 
-// Route hello JSON
+// JSON greeting route
 app.get('/hello/json', (req, res) => {
   res.json({
     greeting: 'Hello World!',
@@ -47,7 +47,7 @@ app.get('/hello/json', (req, res) => {
   });
 });
 
-// Route de santé
+// Health route
 app.get('/health', (req, res) => {
   res.json({
     status: 'UP',
@@ -59,7 +59,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Route de santé pour Kubernetes
+// Kubernetes readiness route
 app.get('/ready', (req, res) => {
   res.json({
     status: 'READY',
@@ -68,7 +68,7 @@ app.get('/ready', (req, res) => {
   });
 });
 
-// Middleware de gestion d'erreur
+// Error-handling middleware
 app.use((err, req, res, _next) => {
   console.error('Error:', err.message);
   res.status(500).json({
@@ -77,7 +77,7 @@ app.use((err, req, res, _next) => {
   });
 });
 
-// Middleware pour les routes non trouvées
+// Not-found middleware
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Not Found',
@@ -92,10 +92,10 @@ app.use('*', (req, res) => {
   });
 });
 
-// Export de l'application pour les tests
+// Export the application for tests
 module.exports = app;
 
-// Démarrage du serveur seulement si ce fichier est exécuté directement
+// Start the server only when this file is executed directly
 if (require.main === module) {
   const server = app.listen(PORT, HOST, () => {
     console.log('🚀 Node.js Hello World server started');
@@ -111,7 +111,7 @@ if (require.main === module) {
     console.log(`  GET http://localhost:${PORT}/ready     - Readiness check`);
   });
 
-  // Gestion propre de l'arrêt
+  // Graceful shutdown
   process.on('SIGTERM', () => {
     console.log('📱 SIGTERM received, shutting down gracefully...');
     server.close(() => {

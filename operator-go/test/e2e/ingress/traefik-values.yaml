@@ -1,0 +1,36 @@
+# Pinned chart 41.5.0 / Traefik v3.7.13; dedicated local Kind controller.
+ingressClass:
+  enabled: true
+  name: shadok-local
+  isDefaultClass: false
+providers:
+  kubernetesIngress:
+    enabled: true
+    ingressClass: shadok-local
+    publishedService:
+      enabled: false
+    ingressEndpoint:
+      ip: 127.0.0.1
+    namespaces: [shadok-ingress-e2e]
+  kubernetesCRD:
+    enabled: true
+    namespaces: [shadok-ingress-e2e]
+service:
+  spec:
+    type: NodePort
+ports:
+  web:
+    nodePort: 30080
+  websecure:
+    nodePort: 30443
+    transport:
+      respondingTimeouts:
+        readTimeout: 120s
+        writeTimeout: 120s
+        idleTimeout: 180s
+accessLog:
+  enabled: true
+  format: json
+resources:
+  requests: {cpu: 20m, memory: 64Mi}
+  limits: {memory: 256Mi}

@@ -8,14 +8,14 @@ try:
     from .config import config
     from .models import HelloResponse, HealthResponse
 except ImportError:
-    # Fallback pour les imports directs
+    # Fallback for direct imports
     from config import config
     from models import HelloResponse, HealthResponse
 
-# Temps de démarrage pour calculer l'uptime
+# Startup time used to calculate uptime
 start_time = time.time()
 
-# Création de l'application FastAPI
+# Create the FastAPI application
 app = FastAPI(
     title=config.APP_NAME,
     description=config.APP_DESCRIPTION,
@@ -25,12 +25,12 @@ app = FastAPI(
 
 @app.get("/hello", response_class=PlainTextResponse)
 async def hello_text():
-    """Endpoint simple qui retourne Hello World en texte plain"""
+    """Return the greeting as plain text"""
     return "Hello World from Python Pod!"
 
 @app.get("/hello/json", response_model=HelloResponse)
 async def hello_json():
-    """Endpoint qui retourne Hello World en JSON structuré"""
+    """Return a structured JSON greeting"""
     return HelloResponse(
         message="Hello World from Python Pod!",
         service=config.APP_NAME,
@@ -42,7 +42,7 @@ async def hello_json():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint pour Kubernetes"""
+    """Kubernetes health check endpoint"""
     current_time = time.time()
     uptime = current_time - start_time
     
@@ -56,9 +56,9 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    """Endpoint racine qui redirige vers la documentation"""
+    """Root endpoint with documentation links"""
     return {
-        "message": f"Bienvenue sur {config.APP_NAME}",
+        "message": f"Welcome to {config.APP_NAME}",
         "version": config.APP_VERSION,
         "docs": "/docs",
         "health": "/health",

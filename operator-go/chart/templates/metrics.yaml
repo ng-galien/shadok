@@ -1,0 +1,31 @@
+{{- if and .Values.operator.enabled .Values.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "shadok.name" . }}-metrics
+  labels:
+    {{- include "shadok.labels" (dict "root" . "component" "operator") | nindent 4 }}
+  annotations: {{ toJson .Values.commonAnnotations }}
+spec:
+  type: ClusterIP
+  selector: {app.kubernetes.io/instance: {{ include "shadok.name" . }}}
+  ports:
+    - {name: metrics, port: {{ .Values.metrics.port }}, targetPort: metrics}
+{{- if .Values.metrics.serviceMonitor.enabled }}
+{{- if not (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor") }}{{ fail "ServiceMonitor requires the Prometheus Operator CRD" }}{{ end }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "shadok.name" . }}
+  labels: {{ toJson (mergeOverwrite (deepCopy .Values.commonLabels) .Values.metrics.serviceMonitor.labels) }}
+  annotations: {{ toJson (mergeOverwrite (deepCopy .Values.commonAnnotations) .Values.metrics.serviceMonitor.annotations) }}
+spec:
+  namespaceSelector: {matchNames: [{{ .Release.Namespace | quote }}]}
+  selector: {matchLabels: {app.kubernetes.io/instance: {{ include "shadok.name" . }}}}
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+{{- end }}
+{{- end }}

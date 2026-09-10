@@ -1,1 +1,1 @@
-# Python Hello World Pod pour Shadok
+# Python Hello World Pod for Shadok

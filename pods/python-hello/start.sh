@@ -1,60 +1,60 @@
 #!/bin/bash
 
-# Script de démarrage pour l'application Python Hello World
+# Startup script for the Python Hello World application
 
 set -e
 
-echo "🐍 Démarrage de l'application Python Hello World"
+echo "🐍 Starting the Python Hello World application"
 
-# Fonction d'aide
+# Help function
 show_help() {
     echo "Usage: $0 [OPTION]"
     echo ""
     echo "Options:"
-    echo "  dev       Démarre en mode développement avec live reload"
-    echo "  install   Installe les dépendances Python"
-    echo "  build     Construit l'image Docker"
-    echo "  test      Lance les tests avec pytest"
-    echo "  docker    Construit et lance avec Docker Compose"
-    echo "  k8s       Applique les manifests Kubernetes"
-    echo "  clean     Nettoie les fichiers temporaires"
-    echo "  help      Affiche cette aide"
+    echo "  dev       Start development mode with live reload"
+    echo "  install   Install Python dependencies"
+    echo "  build     Build the Docker image"
+    echo "  test      Run pytest tests"
+    echo "  docker    Build and run with Docker Compose"
+    echo "  k8s       Apply Kubernetes manifests"
+    echo "  clean     Clean temporary files"
+    echo "  help      Show this help"
     echo ""
 }
 
-# Vérification de Python
+# Check Python availability
 check_python() {
     if ! command -v python3 &> /dev/null; then
-        echo "❌ Python 3 n'est pas installé"
+        echo "❌ Python 3 is not installed"
         exit 1
     fi
-    echo "✅ Python $(python3 --version) détecté"
+    echo "✅ Python $(python3 --version) detected"
 }
 
-# Installation des dépendances
+# Installing dependencies
 install_deps() {
-    echo "📦 Installation des dépendances Python..."
+    echo "📦 Installing Python dependencies..."
 
-    # Création de l'environnement virtuel si nécessaire
+    # Create a virtual environment when needed
     if [ ! -d "venv" ]; then
-        echo "🔧 Création de l'environnement virtuel..."
+        echo "🔧 Creating the virtual environment..."
         python3 -m venv venv
     fi
 
-    # Activation de l'environnement virtuel
+    # Activate the virtual environment
     source venv/bin/activate
 
-    # Installation des dépendances
+    # Installing dependencies
     pip install --upgrade pip
     pip install -r requirements.txt
 
-    echo "✅ Dépendances installées!"
+    echo "✅ Dependencies installed!"
 }
 
-# Vérification des arguments
+# Check arguments
 case "${1:-help}" in
     "dev")
-        echo "🔄 Démarrage en mode développement..."
+        echo "🔄 Starting development mode..."
         check_python
         install_deps
         source venv/bin/activate
@@ -62,49 +62,49 @@ case "${1:-help}" in
         python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
         ;;
     "install")
-        echo "📦 Installation des dépendances..."
+        echo "📦 Installing dependencies..."
         check_python
         install_deps
         ;;
     "build")
-        echo "🔨 Construction de l'image Docker..."
+        echo "🔨 Building the Docker image..."
         docker build -t shadok-pods/python-hello:latest .
-        echo "✅ Image construite: shadok-pods/python-hello:latest"
+        echo "✅ Image built: shadok-pods/python-hello:latest"
         ;;
     "test")
-        echo "🧪 Lancement des tests..."
+        echo "🧪 Running tests..."
         check_python
         install_deps
         source venv/bin/activate
         python -m pytest tests/ -v
-        echo "✅ Tests terminés!"
+        echo "✅ Tests completed!"
         ;;
     "docker")
-        echo "🐳 Construction et démarrage avec Docker..."
+        echo "🐳 Building and starting with Docker..."
         docker-compose up --build
         ;;
     "k8s")
-        echo "☸️  Application des manifests Kubernetes..."
+        echo "☸️  Applying Kubernetes manifests..."
         kubectl apply -f k8s/
-        echo "✅ Manifests appliqués!"
-        echo "📋 Pour vérifier le déploiement:"
+        echo "✅ Manifests applied!"
+        echo "📋 To check the deployment:"
         echo "   kubectl get pods -l app.kubernetes.io/name=python-hello"
         echo "   kubectl get svc python-hello"
         ;;
     "clean")
-        echo "🧹 Nettoyage..."
+        echo "🧹 Cleaning..."
         rm -rf venv/
         rm -rf __pycache__/
         rm -rf .pytest_cache/
         find . -name "*.pyc" -delete
         find . -name "*.pyo" -delete
-        echo "✅ Nettoyage terminé!"
+        echo "✅ Cleanup completed!"
         ;;
     "help")
         show_help
         ;;
     *)
-        echo "❌ Option invalide: $1"
+        echo "❌ Invalid option: $1"
         show_help
         exit 1
         ;;

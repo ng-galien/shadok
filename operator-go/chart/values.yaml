@@ -1,0 +1,157 @@
+# Complete image references (strings) remain accepted for existing local values.
+# Object tags default to Chart.appVersion; digest takes precedence over tag.
+nameOverride: ""
+fullnameOverride: ""
+commonLabels: {}
+commonAnnotations: {}
+imagePullSecrets: []
+rbac:
+  create: true
+serviceAccounts:
+  operator: {create: true, name: "", annotations: {}, labels: {}, automountServiceAccountToken: true}
+  gateway: {create: true, name: "", annotations: {}, labels: {}, automountServiceAccountToken: true}
+operator:
+  # false creates only the configured application session; no duplicate infrastructure.
+  enabled: true
+  image: {repository: shadok-operator, tag: "", digest: ""}
+  imagePullPolicy: IfNotPresent
+  toolImage: {repository: shadok-tools, tag: "", digest: ""}
+  replicas: 1
+  leaderElection: {enabled: true, id: shadok-operator}
+  # Empty watches all namespaces. A scoped install receives Roles in these namespaces.
+  watchNamespaces: []
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 256Mi}
+  readinessProbe: {httpGet: {path: /readyz, port: health}, initialDelaySeconds: 2, periodSeconds: 5}
+  livenessProbe: {httpGet: {path: /healthz, port: health}, initialDelaySeconds: 10, periodSeconds: 10}
+  startupProbe: {httpGet: {path: /healthz, port: health}, periodSeconds: 2, failureThreshold: 60}
+  podLabels: {}
+  podAnnotations: {}
+  annotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+  terminationGracePeriodSeconds: 30
+  podSecurityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532}
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: [ALL]}
+  extraArgs: []
+  extraEnv: []
+  envFrom: []
+  extraVolumes: []
+  extraVolumeMounts: []
+  tmpSizeLimit: 1Gi
+  pdb:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: null
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+gateway:
+  image: {repository: shadok-gateway, tag: "", digest: ""}
+  imagePullPolicy: IfNotPresent
+  replicas: 1
+  # Alternative to TLS termination at an Ingress.
+  tlsSecretName: ""
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 256Mi}
+  readinessProbe: {tcpSocket: {port: sync}, initialDelaySeconds: 2, periodSeconds: 5}
+  livenessProbe: {tcpSocket: {port: sync}, initialDelaySeconds: 10, periodSeconds: 10}
+  startupProbe: {tcpSocket: {port: sync}, periodSeconds: 2, failureThreshold: 60}
+  autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 5, targetCPUUtilizationPercentage: 75, targetMemoryUtilizationPercentage: null, behavior: {}}
+  podLabels: {}
+  podAnnotations: {}
+  annotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+  terminationGracePeriodSeconds: 30
+  podSecurityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532}
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: [ALL]}
+  extraArgs: []
+  extraEnv: []
+  envFrom: []
+  extraVolumes: []
+  extraVolumeMounts: []
+  tmpSizeLimit: 1Gi
+  pdb:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: null
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+service:
+  type: ClusterIP
+  port: 80
+  nodePort: null
+  annotations: {}
+  labels: {}
+  clusterIP: ""
+  loadBalancerClass: ""
+  loadBalancerSourceRanges: []
+  externalTrafficPolicy: ""
+  internalTrafficPolicy: ""
+ingress:
+  enabled: false
+  className: ""
+  labels: {}
+  annotations: {}
+  # host/tlsSecretName are short forms; hosts/tls allow multiple rules and certificates.
+  host: sync.example.com
+  tlsSecretName: ""
+  hosts: []
+  tls: []
+metrics:
+  enabled: false
+  port: 8081
+  serviceMonitor:
+    enabled: false
+    labels: {}
+    annotations: {}
+    interval: 30s
+    scrapeTimeout: 10s
+networkPolicy:
+  enabled: false
+  # Required when enabled: real API server/service CIDRs for your cluster.
+  apiServerCIDRs: []
+  apiServerPorts: [443, 6443]
+  gatewayIngressFrom: []
+  metricsIngressFrom: []
+uninstallGuard:
+  enabled: true
+  activeDeadlineSeconds: 60
+tests:
+  enabled: true
+  image: {repository: busybox, tag: "1.37.0", digest: ""}
+session:
+  create: false
+  name: live
+  namespace: ""
+  labels: {}
+  annotations: {}
+  enabled: false
+  deployment: ""
+  container: app
+  # Optional live image: applied to application AND seed; original image is restored on disable.
+  image: ""
+  imagePullPolicy: ""
+  runAsUser: 1000
+  runAsGroup: 1000
+  directories: []
+  start:
+    command: []
+    args: []
+    workingDir: ""

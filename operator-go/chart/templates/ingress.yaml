@@ -1,0 +1,35 @@
+{{- if and .Values.operator.enabled .Values.ingress.enabled }}
+{{- $root := . }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "shadok.name" . }}
+  labels: {{ toJson (mergeOverwrite (deepCopy .Values.commonLabels) .Values.ingress.labels) }}
+  annotations: {{ toJson (mergeOverwrite (deepCopy .Values.commonAnnotations) .Values.ingress.annotations) }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls: {{ toJson .Values.ingress.tls }}
+  {{- else if .Values.ingress.tlsSecretName }}
+  tls:
+    - hosts: [{{ .Values.ingress.host | quote }}]
+      secretName: {{ .Values.ingress.tlsSecretName | quote }}
+  {{- end }}
+  rules:
+    {{- $hosts := .Values.ingress.hosts | default (list (dict "host" .Values.ingress.host "paths" (list (dict "path" "/" "pathType" "Prefix")))) }}
+    {{- range $hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path | quote }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "shadok.name" $root }}
+                port: {name: sync}
+          {{- end }}
+    {{- end }}
+{{- end }}

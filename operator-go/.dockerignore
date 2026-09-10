@@ -1,0 +1,4 @@
+bin
+dist
+**/testdata
+**/*_test.go

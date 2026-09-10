@@ -1,0 +1,8 @@
+version: 1
+project: ts-hello
+groups:
+  service:
+    mode: build
+    roots:
+      - mount: application
+        path: dist

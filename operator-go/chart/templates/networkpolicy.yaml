@@ -1,0 +1,57 @@
+{{- if and .Values.operator.enabled .Values.networkPolicy.enabled }}
+{{- if not .Values.networkPolicy.apiServerCIDRs }}{{ fail "networkPolicy.apiServerCIDRs must include API service and endpoint addresses" }}{{ end }}
+{{- $root := . }}
+{{- range $component := list "operator" "gateway" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "shadok.componentName" (dict "root" $root "component" $component) }}
+  labels: {{ toJson $root.Values.commonLabels }}
+  annotations: {{ toJson $root.Values.commonAnnotations }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ include "shadok.componentName" (dict "root" $root "component" $component) }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    {{- if eq $component "gateway" }}
+    - ports: [{protocol: TCP, port: 8080}]
+      {{- with $root.Values.networkPolicy.gatewayIngressFrom }}
+      from: {{ toJson . }}
+      {{- end }}
+    {{- else if $root.Values.metrics.enabled }}
+    - ports: [{protocol: TCP, port: {{ $root.Values.metrics.port }}}]
+      {{- with $root.Values.networkPolicy.metricsIngressFrom }}
+      from: {{ toJson . }}
+      {{- end }}
+    {{- else }}
+    []
+    {{- end }}
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    - to:
+        {{- range $root.Values.networkPolicy.apiServerCIDRs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+        {{- end }}
+      ports:
+        {{- range $root.Values.networkPolicy.apiServerPorts }}
+        - {protocol: TCP, port: {{ . }}}
+        {{- end }}
+    {{- if eq $component "gateway" }}
+    - to:
+        {{- if $root.Values.operator.watchNamespaces }}
+        {{- range $root.Values.operator.watchNamespaces }}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ . | quote }}}}
+          podSelector: {matchExpressions: [{key: shadok.org/session, operator: Exists}]}
+        {{- end }}
+        {{- else }}
+        - namespaceSelector: {}
+          podSelector: {matchExpressions: [{key: shadok.org/session, operator: Exists}]}
+        {{- end }}
+      ports: [{protocol: TCP, port: 7777}]
+    {{- end }}
+{{- end }}
+{{- end }}

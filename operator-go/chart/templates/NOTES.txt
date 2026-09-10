@@ -1,0 +1,11 @@
+Shadok {{ .Chart.AppVersion }}
+{{ if .Values.operator.enabled }}
+Operator: {{ include "shadok.name" . }}
+Gateway: {{ include "shadok.name" . }}-gateway
+Run: helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+{{ if .Values.ingress.enabled }}Gateway host: {{ .Values.ingress.host }}{{ end }}
+Before uninstall: disable every DevelopmentSession and wait for Ready=True, reason=Baseline.
+CRDs are retained by Helm. Upgrade them explicitly before upgrading this release.
+{{ end }}
+The gateway requires a trusted network or authentication at your ingress/proxy.
+See the chart and distribution guides for lifecycle, TLS and network policy configuration.

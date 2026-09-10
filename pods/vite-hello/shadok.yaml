@@ -1,0 +1,8 @@
+version: 1
+project: vite-hello
+groups:
+  source:
+    mode: watch
+    roots:
+      - mount: application
+        path: src

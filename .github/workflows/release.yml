@@ -1,0 +1,149 @@
+name: Publish versioned release
+on:
+  push:
+    tags: ['v*']
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.guard.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Validate actual default branch, tag, commit and source version
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          default_branch=$(gh api "repos/$REPOSITORY" --jq .default_branch)
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main "+$RELEASE_REF:$RELEASE_REF"
+          python3 operator-go/scripts/release_guard.py --ref "$RELEASE_REF" --sha "$RELEASE_SHA" --default-branch "$default_branch"
+  verify:
+    needs: guard
+    uses: ./.github/workflows/verify.yml
+    permissions:
+      contents: read
+  publish:
+    needs: [guard, verify]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      packages: write
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      RELEASE_REF: ${{ github.ref }}
+      RELEASE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: operator-go/go.mod
+          cache-dependency-path: operator-go/go.sum
+      - name: Recheck release identity immediately before preparation
+        run: |
+          default_branch=$(gh api "repos/$REPOSITORY" --jq .default_branch)
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main "+$RELEASE_REF:$RELEASE_REF"
+          python3 operator-go/scripts/release_guard.py --ref "$RELEASE_REF" --sha "$RELEASE_SHA" --default-branch "$default_branch"
+          echo "IMAGE_PREFIX=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_ENV"
+          echo "SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Install checksum-verified Helm
+        run: |
+          curl -fsSLO https://get.helm.sh/helm-v4.2.4-linux-amd64.tar.gz
+          curl -fsSLO https://get.helm.sh/helm-v4.2.4-linux-amd64.tar.gz.sha256sum
+          sha256sum --check helm-v4.2.4-linux-amd64.tar.gz.sha256sum
+          tar -xzf helm-v4.2.4-linux-amd64.tar.gz
+          sudo install linux-amd64/helm /usr/local/bin/helm
+      - name: Prepare and verify release-specific artifacts
+        run: |
+          python3 operator-go/scripts/package.py --version "$VERSION" --image-prefix "$IMAGE_PREFIX" --output dist
+          cd dist
+          sha256sum --check "SHA256SUMS-$VERSION"
+          mkdir smoke
+          tar -xzf "shadok_${VERSION}_linux_amd64.tar.gz" -C smoke
+          test "$(smoke/shadok --version)" = "$VERSION"
+          smoke/shadok learn > smoke/learn.md
+          smoke/shadok chart export smoke/chart
+          helm lint smoke/chart --strict
+          python3 ../operator-go/test/release/verify_chart_export.py "shadok-$VERSION.tgz" smoke/chart
+      - name: Create draft release before publishing registries
+        run: |
+          if gh release view "v$VERSION" --repo "$REPOSITORY" >/dev/null 2>&1; then
+            test "$(gh release view "v$VERSION" --repo "$REPOSITORY" --json isDraft --jq .isDraft)" = true
+          else
+            gh release create "v$VERSION" --repo "$REPOSITORY" --verify-tag --draft --title "Shadok $VERSION" --generate-notes
+          fi
+      - name: Authenticate registries and create isolated builder
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          printf '%s' "$GH_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker buildx create --name shadok-release --driver docker-container --use
+          docker buildx inspect --bootstrap
+      - name: Publish multi-platform images and chart
+        run: |
+          python3 operator-go/scripts/images.py --version "$VERSION" --image-prefix "$IMAGE_PREFIX" --builder shadok-release --output dist --push
+          helm push "dist/shadok-$VERSION.tgz" "oci://$IMAGE_PREFIX/charts"
+          mkdir -p /tmp/shadok-published-chart
+          helm pull "oci://$IMAGE_PREFIX/charts/shadok" --version "$VERSION" --destination /tmp/shadok-published-chart
+          cmp "dist/shadok-$VERSION.tgz" "/tmp/shadok-published-chart/shadok-$VERSION.tgz"
+          for component in operator gateway tools; do
+            docker buildx imagetools inspect "$IMAGE_PREFIX/$component:$VERSION" --raw > "dist/$component-$VERSION.index.json"
+          done
+          python3 - <<'PYIMAGE'
+          import json, os, pathlib
+          for component in ('operator', 'gateway', 'tools'):
+              path = pathlib.Path('dist') / f"{component}-{os.environ['VERSION']}.index.json"
+              index = json.loads(path.read_text())
+              platforms = {(m.get('platform', {}).get('os'), m.get('platform', {}).get('architecture')) for m in index['manifests']}
+              if not {('linux', 'amd64'), ('linux', 'arm64')} <= platforms:
+                  raise SystemExit(f'missing release platform for {component}: {platforms}')
+          PYIMAGE
+          for component in operator gateway tools; do
+            test -s "dist/$component-$VERSION.metadata.json"
+          done
+      - name: Record publication metadata and refresh checksums
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, sys
+          sys.path.insert(0, 'operator-go/scripts')
+          from release_common import checksums
+          out = pathlib.Path('dist')
+          version = os.environ['VERSION']
+          manifest = out / f'release-{version}.json'
+          data = json.loads(manifest.read_text())
+          data.update(published=True, sourceCommit=os.environ['SOURCE_COMMIT'],
+                      chart=f"oci://{os.environ['IMAGE_PREFIX']}/charts/shadok")
+          manifest.write_text(json.dumps(data, indent=2) + '\n')
+          artifacts = [*out.glob('*.tar.gz'), *out.glob('*.tgz'), *out.glob('*.json')]
+          (out / f'SHA256SUMS-{version}').write_text(checksums(artifacts))
+          PY
+          cd dist
+          sha256sum --check "SHA256SUMS-$VERSION"
+          sha256sum --check "SHA256SUMS-images-$VERSION"
+      - name: Upload verified artifacts and publish release
+        run: |
+          gh release upload "v$VERSION" --repo "$REPOSITORY" --clobber dist/*.tar.gz dist/*.tgz dist/*.json dist/SHA256SUMS-*
+          if [[ "$VERSION" == *-* ]]; then
+            gh release edit "v$VERSION" --repo "$REPOSITORY" --draft=false --prerelease
+          else
+            gh release edit "v$VERSION" --repo "$REPOSITORY" --draft=false --latest
+          fi
+      - name: Remove ephemeral registry credentials
+        if: always()
+        run: |
+          docker logout ghcr.io || true
+          helm registry logout ghcr.io || true

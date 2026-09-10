@@ -1,6 +1,5 @@
 rootProject.name = "shadok"
 
-include(":operator")
 include("pods:quarkus-hello")
 
 
