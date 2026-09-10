@@ -2,9 +2,9 @@
 build/
 .gradle/
 gradle-app.setting
-!gradle/wrapper/
 
-# Gradle multi-modules specific
+
+# Sample build outputs
 **/build/
 
 # Quarkus specific
@@ -80,3 +80,6 @@ logs/
 **/__pycache__/
 
 /dist/
+
+# The Quarkus example owns its verified Gradle wrapper.
+!pods/quarkus-hello/gradle/wrapper/gradle-wrapper.jar

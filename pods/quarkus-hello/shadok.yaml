@@ -1,0 +1,11 @@
+version: 1
+project: quarkus-hello
+groups:
+  quarkus-outputs:
+    mode: build
+    roots:
+      - mount: classes
+        path: build/classes/java/main
+      - mount: resources
+        path: build/resources/main
+        optional: true

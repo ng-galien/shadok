@@ -1,5 +1,6 @@
 plugins {
     id("java")
+    alias(libs.plugins.spotless)
     id("io.quarkus") version "3.8.1"
 }
 
@@ -37,6 +38,7 @@ java {
 }
 
 tasks.withType<Test> {
+    useJUnitPlatform()
     systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
 }
 
@@ -53,4 +55,58 @@ tasks.register<Exec>("shadokPublish") {
     workingDir(rootProject.projectDir)
     commandLine("shadok", "publish", "--config",
         rootProject.file("shadok.yaml").absolutePath, "--group", "quarkus-outputs")
+}
+
+// Spotless configuration
+configure<com.diffplug.gradle.spotless.SpotlessExtension> {
+    java {
+        googleJavaFormat(libs.versions.google.java.format.get())
+        removeUnusedImports()
+        indentWithSpaces(4)
+        trimTrailingWhitespace()
+        endWithNewline()
+
+        target("src/**/*.java")
+    }
+
+    format("markdown") {
+        target("**/*.md")
+        targetExclude("**/venv/**", "**/node_modules/**", "**/build/**", "**/target/**")
+        prettier().config(mapOf(
+            "parser" to "markdown",
+            "proseWrap" to "always",
+            "printWidth" to 80,
+            "tabWidth" to 2
+        ))
+    }
+
+    // Dockerfile formatting
+    format("dockerfile") {
+        target("**/Dockerfile*")
+        targetExclude("**/venv/**", "**/node_modules/**", "**/build/**", "**/target/**")
+        // Basic Dockerfile formatting
+        indentWithSpaces(4)
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+
+    // Shell script formatting
+    format("shell") {
+        target("**/*.sh")
+        targetExclude("**/venv/**", "**/node_modules/**", "**/build/**", "**/target/**")
+        // Basic shell script formatting
+        indentWithSpaces(2)
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+
+    // Basic TOML formatting without additional formatter dependencies
+    format("toml") {
+        target("**/*.toml")
+        targetExclude("**/venv/**", "**/node_modules/**", "**/build/**", "**/target/**")
+        // Use consistent indentation
+        indentWithSpaces(2)
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
 }

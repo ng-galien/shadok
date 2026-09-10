@@ -1,6 +1,6 @@
 # Shadok development guidance
 
-The active implementation is the Go module in `operator-go/`. Spring and Quarkus are application demos; operator behavior must remain independent of application languages.
+The active implementation is the Go module in `operator-go/`. All application demos and their build/sync tooling live in `pods/<example>/`; run their commands from that directory. There is no root Gradle project. Spring and Quarkus are application demos; operator behavior must remain independent of application languages.
 
 Read `operator-go/README.md`, `operator-go/chart/README.md` and `docs/OPERATOR_REVIEW.md` before changing contracts. A DevelopmentSession transforms an existing Deployment in place and restores its exact baseline PodTemplate. Do not introduce a runtime/language enum or separate application Deployment. Application images and start commands select runtime behavior.
 

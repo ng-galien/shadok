@@ -1,5 +1,20 @@
 # Spring Boot live development
 
+## Run locally
+
+From `pods/spring-hello`, with JDK 17+ and Maven.
+
+```sh
+mvn verify
+java -cp "target/classes:target/lib/*" example.Application
+```
+
+Open http://localhost:8080/hello. Stop the server with Ctrl+C.
+
+## Run with Shadok
+
+Follow the [shared session and destination setup](../README.md#before-synchronizing-an-example). The commands below also run from this example directory.
+
 Build the baseline with `mvn verify`, then build the supplied Dockerfile. It includes `target/classes`, runtime dependencies and DevTools; Maven is needed on the build machine, not in the live pod.
 
 The existing Deployment must use an image with that layout. Configure a DevelopmentSession with container `app`, directory name `classes`, imagePath and mountPath `/app/classes`, UID/GID 1000, workingDir `/app`, and command `java` with args `[-cp, "/app/classes:/app/lib/*", example.Application]`.

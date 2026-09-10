@@ -1,5 +1,21 @@
 # TypeScript live development
 
+## Run locally
+
+From `pods/ts-hello`, with Node.js 20+ and npm.
+
+```sh
+npm ci
+npm run build
+npm start
+```
+
+Open http://localhost:8080/hello. Stop the server with Ctrl+C.
+
+## Run with Shadok
+
+Follow the [shared session and destination setup](../README.md#before-synchronizing-an-example). The commands below also run from this example directory.
+
 From this directory, run `npm ci` and `npm run build`, then build the supplied Dockerfile for the platform's baseline Deployment.
 
 Configure a DevelopmentSession with container `app`, directory name `application`, imagePath and mountPath `/app/dist`, UID/GID 1000, workingDir `/app`, command `node` and args `[--watch, dist/server.js]`. The application image must include Node and the initial compiled output.

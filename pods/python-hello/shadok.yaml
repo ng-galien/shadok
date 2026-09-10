@@ -1,0 +1,9 @@
+version: 1
+project: python-hello
+groups:
+  python-source:
+    mode: watch
+    roots:
+      - mount: application
+        path: src
+        exclude: ["**/__pycache__/**", "**/*.pyc", "**/*.swp"]

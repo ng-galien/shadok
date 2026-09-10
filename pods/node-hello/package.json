@@ -10,10 +10,10 @@
     "test:watch": "jest --watch",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "dev:cluster": "npm test && shadok watch --config ../../shadok.yaml --group node-source",
-    "cluster:publish": "npm test && shadok publish --config ../../shadok.yaml --group node-source",
+    "dev:cluster": "npm test && shadok watch --config shadok.yaml --group node-source",
+    "cluster:publish": "npm test && shadok publish --config shadok.yaml --group node-source",
     "cluster:status": "shadok status",
-    "cluster:stop": "shadok unwatch --config ../../shadok.yaml --group node-source"
+    "cluster:stop": "shadok unwatch --config shadok.yaml --group node-source"
   },
   "keywords": [
     "nodejs",

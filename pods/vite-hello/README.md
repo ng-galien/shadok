@@ -1,5 +1,20 @@
 # Vite live development
 
+## Run locally
+
+From `pods/vite-hello`, with Node.js 20+ and npm.
+
+```sh
+npm ci
+npm run dev
+```
+
+Open http://localhost:8080/. Stop the server with Ctrl+C.
+
+## Run with Shadok
+
+Follow the [shared session and destination setup](../README.md#before-synchronizing-an-example). The commands below also run from this example directory.
+
 From this directory, run `npm ci`, then build the supplied Dockerfile. Configure a DevelopmentSession for the existing Deployment with container `app`, directory name `application`, imagePath and mountPath `/app/src`, UID/GID 1000, workingDir `/app`, command `./node_modules/.bin/vite` and args `[--host, 0.0.0.0, --port, "8080"]`.
 
 After activating the session and configuring the gateway destination:

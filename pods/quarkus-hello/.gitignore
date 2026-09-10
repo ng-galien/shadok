@@ -4,9 +4,6 @@ target/
 
 # Gradle
 .gradle/
-gradlew
-gradlew.bat
-gradle/
 
 # IDE
 .idea/

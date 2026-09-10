@@ -53,3 +53,7 @@ The final local bundle in `/tmp/shadok-release-final` compiled all four CLI targ
 ## Current publication status
 
 Remote verification passed on commits `9333972` and `fa04d9c`, including real Kind chart lifecycle and baseline synchronization/restoration. Version 1.0.0 is published and the fresh Kind test using anonymous GitHub/GHCR downloads passed. See the [release consumer report](releases/1.0.0-validation.md) and [installation guide](INSTALL_RELEASE.md).
+
+## Sample tooling isolation
+
+The Gradle build/wrapper/catalog now belong to `pods/quarkus-hello`; the obsolete root multi-project launcher was removed. Node, Python and Quarkus own local `shadok.yaml` files. Resolved roots, mount names, modes and exclusions were compared with the previous root configuration and are unchanged. Node's six tests and Quarkus's two tests passed; Quarkus was built using its own wrapper on Gradle 8.14.3 and JDK 21. The standalone `shadokPublish --dry-run` includes compilation and tests before publication. No remote sync was triggered by that dry-run. Earlier root Gradle commands above describe historical validation only.

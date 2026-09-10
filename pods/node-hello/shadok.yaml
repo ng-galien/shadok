@@ -1,0 +1,9 @@
+version: 1
+project: node-hello
+groups:
+  node-source:
+    mode: watch
+    roots:
+      - mount: application
+        path: src
+        exclude: ["**/*.swp", "**/*~"]
