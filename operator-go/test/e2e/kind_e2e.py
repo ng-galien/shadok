@@ -4,9 +4,13 @@ Build/load local images first. kubectl is used by this test administrator only.
 """
 import argparse,json,os,pathlib,re,shutil,ssl,subprocess,tempfile,time,urllib.request,urllib.error
 p=argparse.ArgumentParser();p.add_argument('--stack',choices=['baseline','node','python','spring','ts','vite'],default='baseline');args=p.parse_args()
-ROOT=pathlib.Path(__file__).resolve().parents[3];BIN=ROOT/'operator-go/bin/shadok';NS='shadok-live-e2e';SYSTEM='shadok-live-system'
-K=['kubectl','--kubeconfig','/tmp/shadok-go-e2e.kubeconfig','--context','kind-shadok-go-e2e']
-H=['helm','--kubeconfig','/tmp/shadok-go-e2e.kubeconfig','--kube-context','kind-shadok-go-e2e']
+ROOT=pathlib.Path(__file__).resolve().parents[3];BIN=pathlib.Path(os.environ.get('SHADOK_TEST_BINARY',str(ROOT/'operator-go/bin/shadok')));NS='shadok-live-e2e';SYSTEM='shadok-live-system'
+CLUSTER=os.environ.get('SHADOK_TEST_CLUSTER','shadok-go-e2e')
+assert CLUSTER in ('shadok-go-e2e','shadok-release-smoke'),'not a dedicated test cluster'
+CHART=os.environ.get('SHADOK_TEST_CHART',str(ROOT/'operator-go/chart'))
+RELEASE=os.environ.get('SHADOK_TEST_VERSION','')
+K=['kubectl','--kubeconfig',f'/tmp/{CLUSTER}.kubeconfig','--context','kind-'+CLUSTER]
+H=['helm','--kubeconfig',f'/tmp/{CLUSTER}.kubeconfig','--kube-context','kind-'+CLUSTER]
 HE=dict(os.environ,HELM_CACHE_HOME='/tmp/shadok-helm-cache',HELM_CONFIG_HOME='/tmp/shadok-helm-config',HELM_DATA_HOME='/tmp/shadok-helm-data')
 def kub(*a,input=None):return subprocess.check_output(K+list(a),input=input,text=True,stderr=subprocess.STDOUT)
 def apply(obj):return kub('apply','-f','-',input=json.dumps(obj))
@@ -20,10 +24,14 @@ def wait(fn,description,seconds=120):
         except Exception as e:last=str(e)
         time.sleep(.5)
     raise AssertionError(description+': '+last)
-assert [x['metadata']['name'] for x in json.loads(kub('get','nodes','-o','json'))['items']]==['shadok-go-e2e-control-plane'],'wrong cluster'
+assert [x['metadata']['name'] for x in json.loads(kub('get','nodes','-o','json'))['items']]==[CLUSTER+'-control-plane'],'wrong cluster'
 for ns in [NS,SYSTEM]:apply({'apiVersion':'v1','kind':'Namespace','metadata':{'name':ns}})
 # Existing older CRD in this reused development cluster: Helm deliberately does not upgrade CRDs.
-kub('apply','-f',str(ROOT/'operator-go/chart/crds/shadok.org_developmentsessions.yaml'))
+if not RELEASE:kub('apply','-f',str(ROOT/'operator-go/chart/crds/shadok.org_developmentsessions.yaml'))
+else:
+    assert args.stack=='baseline','release smoke targets baseline'
+    assert subprocess.check_output([str(BIN),'--version'],text=True).strip()==RELEASE
+    subprocess.run(H+['upgrade','--install','runtime',CHART,'--version',RELEASE,'-n',SYSTEM,'--create-namespace','--wait','--timeout','300s'],env=HE,check=True)
 apply({'apiVersion':'v1','kind':'ServiceAccount','metadata':{'name':'developer','namespace':NS}})
 kub('-n',NS,'apply','-f',str(ROOT/'operator-go/config/developer-role.yaml'))
 apply({'apiVersion':'rbac.authorization.k8s.io/v1','kind':'RoleBinding','metadata':{'name':'developer','namespace':NS},'roleRef':{'apiGroup':'rbac.authorization.k8s.io','kind':'Role','name':'shadok-developer'},'subjects':[{'kind':'ServiceAccount','name':'developer','namespace':NS}]})
@@ -54,13 +62,21 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
     subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(key),'-out',str(cert),'-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     secret=json.loads(kub('-n',SYSTEM,'create','secret','tls','gateway-tls','--cert',str(cert),'--key',str(key),'--dry-run=client','-o','json'));apply(secret)
     values={'operator':{'image':{'tag':'local'},'toolImage':{'tag':'local'}},'gateway':{'image':{'tag':'local'},'tlsSecretName':'gateway-tls'},'session':{'create':True,'namespace':NS,'name':name,'enabled':False,'deployment':name,'container':'app','runAsUser':1000,'runAsGroup':1000,'directories':[{'name':mount,'imagePath':image_path,'mountPath':image_path}],'start':{'command':commands[stack][:1],'args':commands[stack][1:],'workingDir':'/app'}}}
+    if RELEASE:
+        values['operator']={}
+        values['gateway'].pop('image')
+        values['service']={'type':'NodePort','nodePort':30443}
     # One infrastructure release, then instance-only releases for additional targets.
     if stack!='baseline':values['operator']={'enabled':False}
     vf=base/'values.json';vf.write_text(json.dumps(values));release='runtime' if stack=='baseline' else stack
-    subprocess.run(H+['upgrade','--install',release,str(ROOT/'operator-go/chart'),'-n',SYSTEM,'-f',str(vf),'--wait','--timeout','120s'],env=HE,check=True)
+    subprocess.run(H+['upgrade','--install',release,CHART,*(['--version',RELEASE] if RELEASE else []),'-n',SYSTEM,'-f',str(vf),'--wait','--timeout','120s'],env=HE,check=True)
     # Refresh TLS after a test has renewed the certificate.
     kub('-n',SYSTEM,'rollout','restart','deployment/runtime-shadok-gateway');kub('-n',SYSTEM,'rollout','status','deployment/runtime-shadok-gateway','--timeout=120s')
     def forward(ns,target,remote):
+        if RELEASE:
+            if ns==SYSTEM:return 18443
+            kub('-n',ns,'patch',target,'--type=merge','-p',json.dumps({'spec':{'type':'NodePort','ports':[{'port':remote,'targetPort':remote,'nodePort':30081}]}}))
+            return 18081
         proc=subprocess.Popen(K+['-n',ns,'port-forward','--address=127.0.0.1',target,f':{remote}'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True);forwards.append(proc)
         line=proc.stdout.readline();m=re.search(r'127.0.0.1:(\d+)',line);assert m,(line,proc.stderr.read());return int(m.group(1))
     gateway='https://localhost:'+str(forward(SYSTEM,'service/runtime-shadok',80));tls=ssl.create_default_context(cafile=str(cert))

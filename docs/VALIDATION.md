@@ -15,7 +15,7 @@ This file distinguishes observed local results from configured CI and publicatio
 - `./gradlew :pods:quarkus-hello:shadokPublish --dry-run --no-daemon` passed with demo tasks and formatting configuration retained. This proves the Gradle task graph, not remote Quarkus dev mode. Existing Gradle APIs report deprecation warnings for a future Gradle 9 upgrade.
 - Source builds succeeded for operator, gateway and tools on Linux ARM64 and AMD64. Custom compiler/runtime bases were exercised; the final runtime label remained present and the gateway ran `--version`.
 - Four CLI archives (macOS/Linux × AMD64/ARM64), chart `0.1.0-review.2`, checksums and a release manifest were prepared. Native embedded version, hashes, chart schema and hook contents were checked. The chart's local OCI push/pull preserved identical bytes. Three local image manifest lists each contained ARM64 and AMD64. Test images were `dev` builds, not published `0.1.0` release images.
-- `git diff --check`, Python syntax checks and CI YAML syntax checks passed. The configured GitHub workflow has not run remotely because these changes have not been pushed.
+- `git diff --check`, Python syntax checks and CI YAML syntax checks passed. Remote verification subsequently passed on main; see the current publication status below.
 
 ## Validation incidents and bounds
 
@@ -48,4 +48,8 @@ Subsequent CLI guidance and release-readiness checks are documented in [RELEASE_
 
 The final `make -C operator-go verify local-e2e` passed after the minimal skill and explicit chart embedding changes: Go race tests, builds, vet, four release contract tests and daemon synchronization/restart recovery. The Node and Python demos each passed six tests after the English documentation and message cleanup. The skill validator passed; `SKILL.md` only activates for Shadok and routes to `shadok learn`.
 
-The final local bundle in `/tmp/shadok-release-final` compiled all four CLI targets and passed all six checksums, strict chart lint, native offline guidance, chart export and minimal skill install/status/uninstall checks. The exported chart matches all 19 packaged files, including release image references. These are local validation results; remote CI and public publication have not run. The project license, registry destinations and release version remain publication decisions.
+The final local bundle in `/tmp/shadok-release-final` compiled all four CLI targets and passed all six checksums, strict chart lint, native offline guidance, chart export and minimal skill install/status/uninstall checks. The exported chart matches all 19 packaged files, including release image references. These historical results predate the final packaging. MIT, GHCR destinations and version 1.0.0 are now selected; see the current publication status below.
+
+## Current publication status
+
+Remote verification passed on commits `9333972` and `fa04d9c`, including real Kind chart lifecycle and baseline synchronization/restoration. The 1.0.0 release is authorized for publication. Registry consumption is a separate gate: run the release smoke procedure in [INSTALL_RELEASE.md](INSTALL_RELEASE.md) after publication, then record the actual result.

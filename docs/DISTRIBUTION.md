@@ -44,7 +44,7 @@ helm upgrade --install shadok oci://registry.example.com/shadok/charts/shadok \
   --version 1.0.0 -n shadok-system --create-namespace -f deployment-values.yaml --wait
 ```
 
-Helm adds the chart name and version to the OCI destination. Archive distribution can instead use `helm repo index` and static HTTPS hosting; OCI keeps image and chart authorization on the same registry. CLI archives and SHA256SUMS can be attached to the release system used by your organization. No public repository, registry or license grant is assumed by these commands.
+Helm adds the chart name and version to the OCI destination. Archive distribution can instead use `helm repo index` and static HTTPS hosting; OCI keeps image and chart authorization on the same registry. CLI archives and SHA256SUMS can be attached to the release system used by your organization. These generic commands also support an enterprise mirror. The repository uses MIT and its official release destinations are specified below.
 
 ## Release gates
 

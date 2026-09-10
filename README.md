@@ -61,6 +61,8 @@ Shadok enables live development on an **existing Kubernetes Deployment**. The Go
 
 `DevelopmentSession` describes a container, directories, a start command, and an optional development image. Runtime and framework behavior belongs to the application image, not an operator language catalog. The CLI and daemon send files over HTTP(S) through the gateway; builds remain local and failed builds are not published. The daemon requires no Kubernetes credentials.
 
+Install a published version using the [release installation guide](docs/INSTALL_RELEASE.md): GitHub CLI downloads, GHCR Helm installation, Kind setup and application configuration.
+
 ## Start with the binary
 
 ```sh

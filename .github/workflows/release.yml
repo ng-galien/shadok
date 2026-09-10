@@ -85,7 +85,7 @@ jobs:
           if gh release view "v$VERSION" --repo "$REPOSITORY" >/dev/null 2>&1; then
             test "$(gh release view "v$VERSION" --repo "$REPOSITORY" --json isDraft --jq .isDraft)" = true
           else
-            gh release create "v$VERSION" --repo "$REPOSITORY" --verify-tag --draft --title "Shadok $VERSION" --generate-notes
+            gh release create "v$VERSION" --repo "$REPOSITORY" --verify-tag --draft --title "Shadok $VERSION" --notes-file CHANGELOG.md
           fi
       - name: Authenticate registries and create isolated builder
         run: |

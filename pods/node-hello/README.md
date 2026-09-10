@@ -1,6 +1,6 @@
 # Node application example
 
-Express serves a greeting and health endpoints. `Dockerfile.dev` includes nodemon for source reload; the baseline `Dockerfile` is separate.
+Express serves a greeting and health endpoints. `Dockerfile.dev` includes nodemon for source reload. Use this supplied image layout for the development session.
 
 From this directory:
 
