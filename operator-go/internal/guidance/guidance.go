@@ -18,7 +18,7 @@ import (
 //go:embed topics/*.md
 var topics embed.FS
 
-var topicNames = []string{"learn", "install", "configure", "builds", "lifecycle", "chart"}
+var topicNames = []string{"learn", "install", "configure", "builds", "spring", "lifecycle", "chart"}
 
 const Help = `Shadok: live development for existing Kubernetes Deployments
 
@@ -27,7 +27,7 @@ Usage: shadok COMMAND [OPTIONS]
 Offline guidance (no daemon, network or cluster access):
   help, --help, -h            Show this command reference
   learn [TOPIC]              Agent onboarding, or a specific operational topic
-  docs [TOPIC]               install, configure, builds, lifecycle, chart,
+  docs [TOPIC]               install, configure, builds, spring, lifecycle, chart,
                             values, schema, crd, all (default: topic index)
   chart export DIRECTORY    Export the complete embedded Helm chart to a new directory
   agent install|status|uninstall [--client codex|claude] [--path DIRECTORY]
@@ -119,7 +119,7 @@ func Document(topic string) ([]byte, error) {
 			return topics.ReadFile("topics/" + topic + ".md")
 		}
 	}
-	return nil, fmt.Errorf("unknown documentation topic %q; available: learn, install, configure, builds, lifecycle, chart, values, schema, crd, all", topic)
+	return nil, fmt.Errorf("unknown documentation topic %q; available: learn, install, configure, builds, spring, lifecycle, chart, values, schema, crd, all", topic)
 }
 
 func Print(w io.Writer, topic string) error {

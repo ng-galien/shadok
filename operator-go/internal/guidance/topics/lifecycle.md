@@ -34,3 +34,7 @@ Save current release values, sessions and their owned baseline ConfigMaps. Prefe
 ## Current limits
 
 Linux and macOS CLI on amd64/arm64. Local Unix-socket daemon; no Windows binary. Polling hashes source trees once per second. Up to 20,000 files, 64 MiB per file, 512 MiB per revision, eight groups per daemon. Symbolic links and special files are refused. Updates are atomic per file, not across a whole revision; file/directory transitions at the same path are unsupported. There is no distributed writer lease: dedicate a live target to one developer. Delivery is retried when receiver cohorts change, but simultaneous independent producers are not coordinated. Authentication remains a platform responsibility. Report rendering, TCP tests, receiver ACK and real application behavior as distinct evidence.
+
+## Spring production/live walkthrough
+
+Run `shadok learn spring` (or `shadok docs spring`) for the complete production-to-DevTools procedure, including `spec.image`, seeding from the selected live image, build publication, class additions/deletions and production restoration.

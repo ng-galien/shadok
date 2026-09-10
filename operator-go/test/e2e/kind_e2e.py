@@ -54,7 +54,14 @@ else:
     wait(lambda:not get('deployment',name)['spec']['template']['metadata'].get('annotations',{}).get('shadok.org/live-session'),'cleanup previous live test')
 d['spec']['template']['spec']['containers'][0]['readinessProbe']={'httpGet':{'path':'/' if stack in ('baseline','vite') else '/hello','port':port},'initialDelaySeconds':3,'periodSeconds':1}
 apply(d);apply({'apiVersion':'v1','kind':'Service','metadata':{'name':name,'namespace':NS},'spec':{'selector':{'app':name},'ports':[{'port':port,'targetPort':port}]}})
+if stack=='spring':kub('-n',NS,'rollout','restart','deployment/'+name)
 kub('-n',NS,'rollout','status','deployment/'+name,'--timeout=120s');original=get('deployment',name)['spec']
+if stack=='spring':
+    baseline_pod=next(x for x in get('pods','')['items'] if x['metadata'].get('labels',{}).get('app')==name and not x['metadata'].get('deletionTimestamp'))
+    baseline_logs=kub('-n',NS,'logs',baseline_pod['metadata']['name'],'-c','app')
+    baseline_libs=kub('-n',NS,'exec',baseline_pod['metadata']['name'],'-c','app','--','ls','/app/lib')
+    assert 'spring-boot-devtools' not in baseline_libs and 'restartedMain' not in baseline_logs,'baseline must not use DevTools'
+    print('PASS Spring production baseline: DevTools jar absent; normal application startup',flush=True)
 with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
     base=pathlib.Path(td);src=base/'src';src.mkdir();forwards=[]
     # Self-signed TLS is scoped to this isolated test; the client validates it explicitly.
@@ -66,6 +73,7 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
         values['operator']={}
         values['gateway'].pop('image')
         values['service']={'type':'NodePort','nodePort':30443}
+    if stack=='spring':values['session']['image']='shadok-spring-live:local'
     # One infrastructure release, then instance-only releases for additional targets.
     if stack!='baseline':values['operator']={'enabled':False}
     vf=base/'values.json';vf.write_text(json.dumps(values));release='runtime' if stack=='baseline' else stack
@@ -142,6 +150,58 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
         else:
             f=src/('app.js' if stack=='node' else 'main.py');old='Hello World from Node.js Express server! 🚀' if stack=='node' else 'Hello World from Python Pod!';f.write_text(f.read_text().replace(old,'shadok-live-change'));expected='shadok-live-change'
         expect(expected)
+        if stack=='spring':
+            before=pods()[0]
+            def app_identity(pod):
+                status=next(c for c in pod['status']['containerStatuses'] if c['name']=='app')
+                return pod['metadata']['uid'],status['containerID'],status['restartCount']
+            before_identity=app_identity(before)
+            def response(path):
+                global app_url
+                try:
+                    with urllib.request.urlopen(app_url+path,timeout=5) as r:return r.status,r.read()
+                except urllib.error.HTTPError as e:return e.code,e.read()
+                except (urllib.error.URLError,TimeoutError,ConnectionError):
+                    app_url='http://127.0.0.1:'+str(forward(NS,'service/'+name,port))
+                    return None,b''
+            new_route='/added-controller'
+            def absent(path):
+                try:
+                    urllib.request.urlopen(app_url+path,timeout=5)
+                    raise AssertionError('route already exists: '+path)
+                except urllib.error.HTTPError as e:assert e.code==404,e
+            absent('/added-method')
+            application=work/'src/main/java/example/Application.java'
+            text=application.read_text();pos=text.rfind('}')
+            application.write_text(text[:pos]+'@GetMapping("/added-method") public String added() { return "new-method-live"; }\n'+text[pos:])
+            subprocess.run([str(BIN),'build',*common,'--','mvn','-q','compile'],cwd=work,env=env,check=True)
+            wait(lambda:response('/added-method')==(200,b'new-method-live'),'added method registered by DevTools')
+            assert app_identity(pods()[0])==before_identity,'method addition restarted/replaced container'
+            print('PASS Spring DevTools: added controller method 404 -> 200; same Pod and container',flush=True)
+            try:
+                urllib.request.urlopen(app_url+new_route,timeout=5)
+                raise AssertionError('new controller route already exists')
+            except urllib.error.HTTPError as e:
+                assert e.code==404,e
+            controller=work/'src/main/java/example/AddedController.java'
+            controller.write_text('package example;\nimport org.springframework.web.bind.annotation.*;\n@RestController\npublic class AddedController {\n@GetMapping("/added-controller") public String hello() { return "new-controller-live"; }\n}\n')
+            subprocess.run([str(BIN),'build',*common,'--','mvn','-q','compile'],cwd=work,env=env,check=True)
+            def added_controller():
+                return response(new_route)==(200,b'new-controller-live')
+            wait(added_controller,'new Spring controller discovered by DevTools')
+            assert app_identity(pods()[0])==before_identity,'Spring controller addition restarted/replaced the container'
+            logs=kub('-n',NS,'logs',before['metadata']['name'],'-c','app')
+            assert 'Restarting due to' in logs and 'restartedMain' in logs,'DevTools restart not observed'
+            print('PASS Spring DevTools: new @RestController route 404 -> 200 after build/sync; same Pod UID, container ID and restart count; DevTools restart logged',flush=True)
+            controller.unlink()
+            subprocess.run([str(BIN),'build',*common,'--','mvn','-q','clean','compile'],cwd=work,env=env,check=True)
+            def removed_controller():
+                return response(new_route)[0]==404
+            wait(removed_controller,'deleted controller route removed by DevTools')
+            kub('-n',NS,'exec',before['metadata']['name'],'-c','app','--','test','!','-e','/app/classes/example/AddedController.class')
+            assert app_identity(pods()[0])==before_identity,'controller deletion restarted/replaced container'
+            wait(lambda:response('/added-method')==(200,b'new-method-live'),'remaining route preserved')
+            print('PASS Spring DevTools: deleted controller .class absent in Pod, route 200 -> 404; remaining method still responds; same Pod and container',flush=True)
         if stack=='baseline':
             (src/'added.txt').write_text('added')
             if RELEASE:cli('publish',*common)

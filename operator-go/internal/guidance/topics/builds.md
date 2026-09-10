@@ -70,3 +70,7 @@ tasks.register<Exec>("shadokPublish") {
 ```
 
 Configure separate roots for build/classes/java/main and build/resources/main if both exist, with matching session directory names and classpath entries. Run `./gradlew shadokPublish`; failed dependencies prevent publication. Alternatively wrap the successful build with `shadok build --group service -- ./gradlew build`. This hook proves publication, not a framework-specific remote restart; verify the application's actual response.
+
+## Spring production/live walkthrough
+
+Run `shadok learn spring` (or `shadok docs spring`) for the complete production-to-DevTools procedure, including `spec.image`, seeding from the selected live image, build publication, class additions/deletions and production restoration.

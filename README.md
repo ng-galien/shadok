@@ -102,3 +102,5 @@ The local scripts explicitly target `shadok-go-e2e`; they preserve an existing c
 The API is `v1alpha1`. Protect the gateway through a trusted network or an authenticated ingress; built-in writer authentication is not implemented. File synchronization acknowledgements and application reload verification are separate checks. Local validation does not imply a published release.
 
 Shadok is licensed under the [MIT License](LICENSE).
+
+For Spring Boot, follow the [production-to-DevTools live walkthrough](operator-go/internal/guidance/topics/spring.md) and [real reload evidence](docs/SPRING_LIVE_VALIDATION.md). The walkthrough is included as `shadok learn spring` in the next rebuilt CLI; published 1.0.0 predates this topic.

@@ -57,3 +57,7 @@ Remote verification passed on commits `9333972` and `fa04d9c`, including real Ki
 ## Sample tooling isolation
 
 The Gradle build/wrapper/catalog now belong to `pods/quarkus-hello`; the obsolete root multi-project launcher was removed. Node, Python and Quarkus own local `shadok.yaml` files. Resolved roots, mount names, modes and exclusions were compared with the previous root configuration and are unchanged. Node's six tests and Quarkus's two tests passed; Quarkus was built using its own wrapper on Gradle 8.14.3 and JDK 21. The standalone `shadokPublish --dry-run` includes compilation and tests before publication. No remote sync was triggered by that dry-run. Earlier root Gradle commands above describe historical validation only.
+
+## Spring production baseline and live class changes
+
+[Live evidence](SPRING_LIVE_VALIDATION.md) verifies a production image without DevTools, activation with an explicitly configured live image, added controller method, added/deleted controller class, stable pod/container identity during reload, and exact production restoration.
