@@ -51,3 +51,5 @@ export SHADOK_DESTINATION=my-dev
 Select the appropriate Deployment for the example; a destination is not an instruction to deploy or replace some other application. The platform must already have installed the operator, deployed the application's baseline image and enabled its DevelopmentSession. The image must provide the live command and directories described in the example guide. Keep the gateway behind your platform's access boundary. Local application run/test commands need none of these cluster resources.
 
 A sync ACK proves file application. Verify the example's HTTP response separately. When finished, stop its source watcher (`shadok unwatch --config shadok.yaml --group <group>`) or retained publication job, then disable the session and wait for baseline restoration. `shadok daemon stop` alone preserves jobs for its next start.
+
+See the [complete gateway networking guide](../operator-go/internal/guidance/topics/network.md) for platform exposure, daemon destination settings and diagnostics. It is included as `shadok learn network` in rebuilt CLIs; published 1.0.0 predates this topic.

@@ -5,6 +5,7 @@ Shadok temporarily transforms an existing Kubernetes Deployment for live develop
 Start with `shadok --help` and `shadok version`. All instructions below are embedded in this binary and work offline:
 
 - `shadok docs install`: inspect the target cluster, export the bundled chart, configure images/networking, install and verify.
+- `shadok learn network`: connect the daemon to the gateway through DNS, TLS and Ingress; configure destinations and troubleshoot connectivity.
 - `shadok docs configure`: create a session, project groups and a personal destination; enable and verify live mode.
 - `shadok docs builds`: working Node, TypeScript, Python, Maven and Gradle integration examples.
 - `shadok learn spring`: keep the production image and load DevTools from a read-only volume, or select a separate live image; compile/synchronize and restore.

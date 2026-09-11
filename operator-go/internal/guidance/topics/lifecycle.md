@@ -38,3 +38,5 @@ Linux and macOS CLI on amd64/arm64. Local Unix-socket daemon; no Windows binary.
 ## Spring production/live walkthrough
 
 Run `shadok learn spring` (or `shadok docs spring`) for the complete production-to-DevTools procedure, including a platform-prepared read-only DevTools volume with no image override, the separate-live-image alternative, build publication, class additions/deletions and production restoration.
+
+For gateway exposure, DNS/TLS, destination settings and connectivity diagnosis, run `shadok learn network`.

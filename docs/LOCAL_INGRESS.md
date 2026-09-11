@@ -77,3 +77,5 @@ docker start shadok-ingress-local
 ```
 
 Setup replaces only its relay identified by `shadok.local-test=ingress`, renews its certificate and updates its releases. It does not delete the cluster or unrelated workloads, commit code or publish an internet service.
+
+See the [complete gateway networking guide](../operator-go/internal/guidance/topics/network.md) for platform exposure, daemon destination settings and diagnostics. It is included as `shadok learn network` in rebuilt CLIs; published 1.0.0 predates this topic.

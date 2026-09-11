@@ -173,3 +173,5 @@ kubectl -n team-a get developmentsession spring-live -o yaml
 ## Live evidence
 
 The repository's `docs/SPRING_VOLUME_VALIDATION.md` records the same-image/PVC scenario. `docs/SPRING_LIVE_VALIDATION.md` records the real Kind test: production container without the DevTools JAR; live-image activation; added controller method and new controller returning 200 after initial 404; controller deletion returning 404; unchanged Pod UID, container ID and restart count across updates; and production restoration. This validates Spring context restart, not browser LiveReload or parallel routing.
+
+For gateway exposure, DNS/TLS, destination settings and connectivity diagnosis, run `shadok learn network`.
