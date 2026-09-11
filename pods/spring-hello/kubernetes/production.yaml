@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spring
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: spring}
+  template:
+    metadata:
+      labels: {app: spring}
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: app
+          image: shadok-spring:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /hello, port: 8080}
+          volumeMounts:
+            - name: devtools
+              mountPath: /opt/devtools
+              readOnly: true
+      volumes:
+        - name: devtools
+          persistentVolumeClaim:
+            claimName: spring-devtools
+            readOnly: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spring
+spec:
+  selector: {app: spring}
+  ports:
+    - port: 8080
+      targetPort: 8080

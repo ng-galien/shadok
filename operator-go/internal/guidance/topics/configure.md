@@ -75,4 +75,4 @@ Stop a group with the same config, group and destination: `shadok unwatch --conf
 
 ## Spring production/live walkthrough
 
-Run `shadok learn spring` (or `shadok docs spring`) for the complete production-to-DevTools procedure, including `spec.image`, seeding from the selected live image, build publication, class additions/deletions and production restoration.
+Run `shadok learn spring` (or `shadok docs spring`) for the complete production-to-DevTools procedure, including a platform-prepared read-only DevTools volume with no image override, the separate-live-image alternative, build publication, class additions/deletions and production restoration.

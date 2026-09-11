@@ -43,7 +43,7 @@ def toggle(enabled):return kub('-n',NS,'patch','developmentsession',name,'--type
 stack=args.stack;name=stack;port={'baseline':8080,'node':3000,'python':8000,'spring':8080,'ts':8080,'vite':8080}[stack]
 mount='classes' if stack=='spring' else 'application'
 image_path={'baseline':'/app','node':'/app/src','python':'/app/src','spring':'/app/classes','ts':'/app/dist','vite':'/app/src'}[stack]
-commands={'baseline':['python','-m','http.server','8080','--directory','/app'],'node':['./node_modules/.bin/nodemon','--legacy-watch','src/app.js'],'python':['python','-m','uvicorn','main:app','--host','0.0.0.0','--port','8000','--reload','--reload-dir','/app/src'],'spring':['java','-cp','/app/classes:/app/lib/*','example.Application'],'ts':['node','--watch','dist/server.js'],'vite':['./node_modules/.bin/vite','--host','0.0.0.0','--port','8080']}
+commands={'baseline':['python','-m','http.server','8080','--directory','/app'],'node':['./node_modules/.bin/nodemon','--legacy-watch','src/app.js'],'python':['python','-m','uvicorn','main:app','--host','0.0.0.0','--port','8000','--reload','--reload-dir','/app/src'],'spring':['java','-cp','/app/classes:/app/lib/*:/opt/devtools/*','example.Application'],'ts':['node','--watch','dist/server.js'],'vite':['./node_modules/.bin/vite','--host','0.0.0.0','--port','8080']}
 # A platform-owned Deployment exists before the Shadok release; no generated dev Deployment.
 d={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':name,'namespace':NS},'spec':{'replicas':2 if stack=='baseline' else 1,'selector':{'matchLabels':{'app':name}},'template':{'metadata':{'labels':{'app':name},'annotations':{'platform.example/retained':'yes'}},'spec':{'containers':[{'name':'app','image':f'shadok-{stack}:local','imagePullPolicy':'IfNotPresent','env':[{'name':'PLATFORM_VALUE','value':'preserved'}],'resources':{'requests':{'cpu':'10m','memory':'32Mi'},'limits':{'memory':'512Mi' if stack=='spring' else '256Mi'}}}]}}}}
 try:
@@ -52,6 +52,20 @@ except subprocess.CalledProcessError:pass
 else:
     toggle(False)
     wait(lambda:not get('deployment',name)['spec']['template']['metadata'].get('annotations',{}).get('shadok.org/live-session'),'cleanup previous live test')
+if stack=='spring':
+    jars=list((ROOT/'pods/spring-hello/target/lib').glob('spring-boot-devtools-*.jar'))
+    assert len(jars)==1,'run mvn verify first to resolve the matching DevTools JAR'
+    kub('-n',NS,'delete','pod','spring-devtools-loader','--ignore-not-found','--wait=true')
+    kub('-n',NS,'apply','-f',str(ROOT/'pods/spring-hello/kubernetes/devtools-volume.yaml'))
+    kub('-n',NS,'wait','--for=condition=Ready','pod/spring-devtools-loader','--timeout=120s')
+    kub('-n',NS,'exec','spring-devtools-loader','-c','loader','--','sh','-c','if [ -f /devtools/spring-boot-devtools.jar ]; then chmod u+w /devtools/spring-boot-devtools.jar; fi')
+    kub('-n',NS,'cp',str(jars[0]),'spring-devtools-loader:/devtools/spring-boot-devtools.jar','-c','loader')
+    kub('-n',NS,'exec','spring-devtools-loader','-c','loader','--','chmod','0444','/devtools/spring-boot-devtools.jar')
+    kub('-n',NS,'delete','pod','spring-devtools-loader','--wait=true')
+    ps=d['spec']['template']['spec']
+    ps['securityContext']={'fsGroup':1000}
+    ps['volumes']=[{'name':'devtools','persistentVolumeClaim':{'claimName':'spring-devtools','readOnly':True}}]
+    ps['containers'][0]['volumeMounts']=[{'name':'devtools','mountPath':'/opt/devtools','readOnly':True}]
 d['spec']['template']['spec']['containers'][0]['readinessProbe']={'httpGet':{'path':'/' if stack in ('baseline','vite') else '/hello','port':port},'initialDelaySeconds':3,'periodSeconds':1}
 apply(d);apply({'apiVersion':'v1','kind':'Service','metadata':{'name':name,'namespace':NS},'spec':{'selector':{'app':name},'ports':[{'port':port,'targetPort':port}]}})
 if stack=='spring':kub('-n',NS,'rollout','restart','deployment/'+name)
@@ -61,7 +75,9 @@ if stack=='spring':
     baseline_logs=kub('-n',NS,'logs',baseline_pod['metadata']['name'],'-c','app')
     baseline_libs=kub('-n',NS,'exec',baseline_pod['metadata']['name'],'-c','app','--','ls','/app/lib')
     assert 'spring-boot-devtools' not in baseline_libs and 'restartedMain' not in baseline_logs,'baseline must not use DevTools'
-    print('PASS Spring production baseline: DevTools jar absent; normal application startup',flush=True)
+    baseline_image_id=next(c['imageID'] for c in baseline_pod['status']['containerStatuses'] if c['name']=='app')
+    kub('-n',NS,'exec',baseline_pod['metadata']['name'],'-c','app','--','test','-r','/opt/devtools/spring-boot-devtools.jar')
+    print('PASS Spring production baseline: no DevTools in application libraries; external JAR mounted but not loaded',flush=True)
 with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
     base=pathlib.Path(td);src=base/'src';src.mkdir();forwards=[]
     # Self-signed TLS is scoped to this isolated test; the client validates it explicitly.
@@ -73,7 +89,7 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
         values['operator']={}
         values['gateway'].pop('image')
         values['service']={'type':'NodePort','nodePort':30443}
-    if stack=='spring':values['session']['image']='shadok-spring-live:local'
+    if stack=='spring':values['session']['image']=''
     # One infrastructure release, then instance-only releases for additional targets.
     if stack!='baseline':values['operator']={'enabled':False}
     vf=base/'values.json';vf.write_text(json.dumps(values));release='runtime' if stack=='baseline' else stack
@@ -105,6 +121,13 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
     live=get('deployment',name)['spec'];assert live['replicas']==original['replicas'];assert live['template']['metadata']['labels']['app']==name
     assert live['template']['spec']['containers'][0]['env']==original['template']['spec']['containers'][0]['env']
     def pods():return [x for x in get('pods','')['items'] if x['metadata'].get('labels',{}).get('app')==name and not x['metadata'].get('deletionTimestamp')]
+    if stack=='spring':
+        live_pod=pods()[0]
+        assert live['template']['spec']['containers'][0]['image']==original['template']['spec']['containers'][0]['image'],'application image changed'
+        assert next(c['imageID'] for c in live_pod['status']['containerStatuses'] if c['name']=='app')==baseline_image_id,'application image digest changed'
+        mounts=live['template']['spec']['containers'][0]['volumeMounts']
+        assert any(m['mountPath']=='/opt/devtools' and m.get('readOnly') for m in mounts),'DevTools not read-only'
+        print('PASS Spring live activation: same production image digest, DevTools from read-only PVC',flush=True)
     if stack!='baseline':
         demo=ROOT/f'pods/{stack}-hello'
         if stack in ('spring','ts'):

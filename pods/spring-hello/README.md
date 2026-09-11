@@ -1,5 +1,12 @@
 # Spring Boot live development
 
+## Same production image, DevTools supplied by a volume
+
+The primary walkthrough now uses a platform-prepared PVC mounted read-only at `/opt/devtools`. The production command ignores it; the Shadok live command includes it. No application-image change and no `spec.image` override are needed. The platform provisions/mounts the volume before activation; Shadok preserves it.
+
+See the [volume walkthrough and commands](../../operator-go/internal/guidance/topics/spring.md#recommended-sample-keep-the-production-image), with runnable [PVC/loader](kubernetes/devtools-volume.yaml), [production Deployment](kubernetes/production.yaml) and [session](kubernetes/session.yaml) manifests. See the [same-image live proof](../../docs/SPRING_VOLUME_VALIDATION.md). The remaining image-switch instructions below describe the supported alternative.
+
+
 ## Production to live, and back
 
 Read the [complete Spring walkthrough](../../operator-go/internal/guidance/topics/spring.md), also embedded as `shadok learn spring` / `shadok docs spring` in the next rebuilt CLI. It includes a complete DevelopmentSession YAML, destination setup, activation, build commands and restoration. The already published 1.0.0 binary does not yet contain this topic.
@@ -51,4 +58,4 @@ DevTools restarts the Spring application context when compiled classes change. A
 
 Shadok mirrors the configured compiled output directory: new `.class` files are uploaded and absent files are removed, respecting exclusions. Deleting a Java source file alone may leave its old `.class` in Maven output. After deletions or renames, use `mvn -Pshadok clean verify` (or `shadok build --config shadok.yaml --group service -- mvn clean verify`) to publish a clean output snapshot. Do not watch a partially rebuilt `target/classes` directory directly.
 
-The live integration scenario is `python3 operator-go/test/e2e/kind_e2e.py --stack spring`, run from the repository root against the prepared `shadok-go-e2e` cluster with the operator/gateway/tools and both Spring images loaded. It checks the production baseline without DevTools, activation with the live image, adding a mapped method, adding/removing a controller, HTTP responses and stable pod/container identity, then baseline restoration.
+The live integration scenario now uses the production image plus the external DevTools PVC (no live-image override). It is `python3 operator-go/test/e2e/kind_e2e.py --stack spring`, run from the repository root against the prepared `shadok-go-e2e` cluster with the operator/gateway/tools and the production Spring image loaded. It checks the production baseline without DevTools, activation on the same image with DevTools from the read-only PVC, adding a mapped method, adding/removing a controller, HTTP responses and stable pod/container identity, then baseline restoration.

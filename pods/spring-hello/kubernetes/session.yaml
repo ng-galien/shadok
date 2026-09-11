@@ -1,0 +1,19 @@
+apiVersion: shadok.org/v1alpha1
+kind: DevelopmentSession
+metadata:
+  name: spring-live
+spec:
+  enabled: false
+  deployment: spring
+  container: app
+  # No image override: keep the production image.
+  runAsUser: 1000
+  runAsGroup: 1000
+  directories:
+    - name: classes
+      imagePath: /app/classes
+      mountPath: /app/classes
+  start:
+    command: [java]
+    args: [-cp, '/app/classes:/app/lib/*:/opt/devtools/*', example.Application]
+    workingDir: /app

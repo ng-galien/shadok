@@ -104,3 +104,5 @@ The API is `v1alpha1`. Protect the gateway through a trusted network or an authe
 Shadok is licensed under the [MIT License](LICENSE).
 
 For Spring Boot, follow the [production-to-DevTools live walkthrough](operator-go/internal/guidance/topics/spring.md) and [real reload evidence](docs/SPRING_LIVE_VALIDATION.md). The walkthrough is included as `shadok learn spring` in the next rebuilt CLI; published 1.0.0 predates this topic.
+
+Spring can also keep its production image and load DevTools from a platform-mounted read-only volume: [same-image live proof](docs/SPRING_VOLUME_VALIDATION.md).

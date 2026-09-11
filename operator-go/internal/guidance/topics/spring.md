@@ -1,16 +1,61 @@
-# Spring Boot: production image to DevTools live mode
+# Spring Boot: DevTools from a volume, keeping the production image
 
-## What changes
+## Recommended sample: keep the production image
 
-Shadok does not turn a production JAR into a development runtime or download DevTools. The application team supplies a compatible live image containing Spring Boot DevTools, runtime dependencies and unpacked compiled classes. `DevelopmentSession.spec.image` selects that image; `spec.start` selects its Java command.
+The Java sample can use the same production image in both modes. The platform prepares a Kubernetes PVC containing the matching DevTools JAR and mounts it read-only at `/opt/devtools` in the existing application Deployment. The production command does not include that path, so DevTools is not loaded. Shadok preserves this mount and changes the live Java command to include it. No `spec.image` override is needed.
 
-1. The platform's existing Deployment runs the production image without DevTools.
-2. Enabling the session makes the operator save the original PodTemplate, select the live image and command, and add the shared volumes and synchronization receiver. Kubernetes rolls out replacement pods once for this activation.
-3. The seed init container uses the **selected live image**, copies its `/app/classes` into an emptyDir, then the application mounts that volume at `/app/classes`. Libraries stay in `/app/lib` in the live image. The seed does not extract files from the old running production pod.
-4. Successful builds on the workstation or CI runner publish compiled classes into that volume. DevTools detects classpath changes and restarts the Spring context inside the JVM. These updates do not require rebuilding the image or replacing the pod/container.
-5. Disabling the session restores the saved production image, command and PodTemplate through another rollout.
+This uses existing volume preservation, not a new operator API. The mount must already be declared in the platform-owned Deployment/chart. Shadok does not create, fill or dynamically attach this PVC. The platform populates it before activation; the synchronization daemon only publishes compiled application outputs afterwards.
 
-This is the current replacement mode, not a parallel A/B workload. Application-context restart can briefly interrupt requests; it is not zero-downtime JVM hot-swap.
+From `pods/spring-hello`, on the platform/test-administrator machine:
+
+```sh
+mvn verify
+docker build --target production -t shadok-spring:local .
+kind load docker-image shadok-spring:local --name shadok-go-e2e
+# Select the intended namespace/context before the Kubernetes commands.
+kubectl -n team-a apply -f kubernetes/devtools-volume.yaml
+kubectl -n team-a wait --for=condition=Ready pod/spring-devtools-loader --timeout=120s
+kubectl -n team-a cp target/lib/spring-boot-devtools-3.5.6.jar spring-devtools-loader:/devtools/spring-boot-devtools.jar -c loader
+kubectl -n team-a exec spring-devtools-loader -c loader -- chmod 0444 /devtools/spring-boot-devtools.jar
+kubectl -n team-a delete pod spring-devtools-loader
+kubectl -n team-a apply -f kubernetes/production.yaml
+kubectl -n team-a rollout status deployment/spring --timeout=120s
+kubectl -n team-a apply -f kubernetes/session.yaml
+```
+
+These are runnable local sample manifests, not a replacement for your enterprise Helm/Helmfile definitions. For an existing application, add only their PVC/mount configuration to your platform chart and use the application's actual image, namespace and command. On remote clusters replace the local image reference in the application and loader with an accessible registry reference. The loader uses the production image's shell and tar; it is a temporary preparation tool, not the application runtime. The sample needs a default StorageClass and compatible storage permissions; its PVC is ReadWriteOnce, which does not promise multi-node shared access. The platform chooses storage suitable for its topology. Provision the matching DevTools version through your normal artifact process, rather than overwriting a shared live volume during an active session.
+
+The application runs with fsGroup 1000 and mounts the PVC read-only. Its production classpath is `/app/classes:/app/lib/*`. The live session adds `/opt/devtools/*` and omits `spec.image`:
+
+```yaml
+apiVersion: shadok.org/v1alpha1
+kind: DevelopmentSession
+metadata:
+  name: spring-live
+  namespace: team-a
+spec:
+  enabled: false
+  deployment: spring
+  container: app
+  runAsUser: 1000
+  runAsGroup: 1000
+  directories:
+    - name: classes
+      imagePath: /app/classes
+      mountPath: /app/classes
+  start:
+    command: [java]
+    args: [-cp, "/app/classes:/app/lib/*:/opt/devtools/*", example.Application]
+    workingDir: /app
+```
+
+Enable with the session command below, then use the build/synchronization procedure in this guide. Shadok seeds the writable classes volume from the unchanged production image. The external DevTools PVC is not mounted into the synchronization receiver. Kubernetes replaces pods at activation and restoration; subsequent class updates restart the Spring context inside the JVM, without replacing the pod/container. Disabling restores the production command, which no longer loads DevTools. The platform-owned PVC and its read-only mount remain, as they are part of the original Deployment. Stopping Shadok does not delete platform data.
+
+The live example uses unpacked classes/dependencies and is not an automatic converter for arbitrary executable JAR layouts. Context restart can briefly interrupt requests; it is not zero-downtime JVM hot-swap or parallel A/B routing.
+
+## Alternative: supply a separate live application image
+
+A separate compatible live image is still supported through `spec.image`. In that alternative, the seed reads classes from the selected live image rather than the production image. The following image-build instructions describe that earlier, separately validated path; they are not required for the PVC approach above.
 
 ## Prepare the application images
 
@@ -34,7 +79,7 @@ The platform deploys `shadok-spring:local` using its existing chart/Helmfile. Th
 
 For another application, build the live image from the matching application revision and compatible dependency versions. Include DevTools and unpacked classes on the live classpath. Do not assume an arbitrary executable JAR has the sample's layout. Preserve required ports, configuration, user permissions and readiness behavior in the live image. Dependency changes require rebuilding that image; this example synchronizes classes and classpath resources only.
 
-## Configure and activate
+## Configure and activate the separate-image alternative
 
 The application chart may create this session. The developer only needs permission to manage the session CR; the operator owns the Deployment changes.
 
@@ -127,4 +172,4 @@ kubectl -n team-a get developmentsession spring-live -o yaml
 
 ## Live evidence
 
-The repository's `docs/SPRING_LIVE_VALIDATION.md` records the real Kind test: production container without the DevTools JAR; live-image activation; added controller method and new controller returning 200 after initial 404; controller deletion returning 404; unchanged Pod UID, container ID and restart count across updates; and production restoration. This validates Spring context restart, not browser LiveReload or parallel routing.
+The repository's `docs/SPRING_VOLUME_VALIDATION.md` records the same-image/PVC scenario. `docs/SPRING_LIVE_VALIDATION.md` records the real Kind test: production container without the DevTools JAR; live-image activation; added controller method and new controller returning 200 after initial 404; controller deletion returning 404; unchanged Pod UID, container ID and restart count across updates; and production restoration. This validates Spring context restart, not browser LiveReload or parallel routing.

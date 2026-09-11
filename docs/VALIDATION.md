@@ -61,3 +61,5 @@ The Gradle build/wrapper/catalog now belong to `pods/quarkus-hello`; the obsolet
 ## Spring production baseline and live class changes
 
 [Live evidence](SPRING_LIVE_VALIDATION.md) verifies a production image without DevTools, activation with an explicitly configured live image, added controller method, added/deleted controller class, stable pod/container identity during reload, and exact production restoration.
+
+[Same-image DevTools volume evidence](SPRING_VOLUME_VALIDATION.md) additionally verifies live reload with the unchanged production image and a platform-provided read-only PVC.

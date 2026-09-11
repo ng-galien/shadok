@@ -25,7 +25,7 @@ Map the session's application directory to the runtime's output directory, for e
 
 For Node source, use the source group from `shadok docs configure` and an npm script `"dev:cluster": "shadok watch --config shadok.yaml --group source"`. For Python, use a watch group rooted at your source directory and configure an image/start command with a real file reload mechanism (for example the application's existing development server). Plain Python execution does not acquire automatic reload simply because files change. Vite similarly needs its dev server running in the application image; verify browser HMR separately from file delivery.
 
-For Maven/Spring, map target/classes to a directory included in the JVM classpath. Use an image with required libraries and Spring DevTools, a JVM classpath/start command and readiness probe that match that image. Example project group:
+For Maven/Spring, map target/classes to a directory included in the JVM classpath. Provide the required libraries and Spring DevTools either in the image or through a platform-prepared read-only volume. Configure a JVM classpath/start command and readiness probe matching that layout. Example project group:
 
 ```yaml
 version: 1
@@ -73,4 +73,4 @@ Configure separate roots for build/classes/java/main and build/resources/main if
 
 ## Spring production/live walkthrough
 
-Run `shadok learn spring` (or `shadok docs spring`) for the complete production-to-DevTools procedure, including `spec.image`, seeding from the selected live image, build publication, class additions/deletions and production restoration.
+Run `shadok learn spring` (or `shadok docs spring`) for the complete production-to-DevTools procedure, including a platform-prepared read-only DevTools volume with no image override, the separate-live-image alternative, build publication, class additions/deletions and production restoration.
