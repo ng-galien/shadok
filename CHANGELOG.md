@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0
+
+- Add offline `shadok learn spring` and `shadok learn network` guides covering live activation, production restoration, gateway exposure, DNS/TLS and daemon destinations.
+- Add a Spring example that keeps the production image and loads DevTools from a platform-prepared read-only PVC. Live validation covers adding a controller method, adding/removing a controller and restoring production. The operator preserves the existing mount; it does not provision this PVC.
+- Isolate sample build tooling and update the six sample run guides.
+- Lower the chart Kubernetes floor from 1.34 to 1.25, based on the existing CRD CEL transition rule. Runtime integration is validated on 1.36.1; this does not claim testing every intervening version.
+
+The CRD remains `v1alpha1`. Built-in writer authentication, parallel A/B routing and session-managed additional volume mounts are not implemented.
+
+CLI archives, images and the OCI chart use version `1.1.0`. See [installation](https://github.com/ng-galien/shadok/blob/main/docs/INSTALL_RELEASE.md) and [Spring volume evidence](https://github.com/ng-galien/shadok/blob/main/docs/SPRING_VOLUME_VALIDATION.md).
+
 ## 1.0.0
 
 - Replace the former Java operator with a Go operator for generic existing Deployments. Preserve Java demo applications.
@@ -11,7 +22,7 @@
 
 The Kubernetes API remains `v1alpha1`. The gateway requires a trusted network or platform access control; it does not provide built-in writer authentication. See `docs/VALIDATION.md` for tested behavior and limits.
 
-## Install this release
+## Install 1.0.0 (historical)
 
 Download the CLI archive for your OS/architecture and verify it using `SHA256SUMS-1.0.0`. The CLI includes offline guides: `shadok learn`.
 

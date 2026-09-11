@@ -1,6 +1,6 @@
 # Install the operator from the binary
 
-Requirements: Helm 3 or 4, kubectl, Kubernetes 1.34+, an existing application Deployment, and accessible operator/gateway/tools images matching this CLI release. Inspect the selected context and existing installations before changing anything. Avoid overlapping controllers with independent leader-election leases.
+Requirements: Helm 3 or 4, kubectl, Kubernetes 1.25+, an existing application Deployment, and accessible operator/gateway/tools images matching this CLI release. Inspect the selected context and existing installations before changing anything. Avoid overlapping controllers with independent leader-election leases.
 
 ```sh
 shadok version
@@ -20,10 +20,10 @@ Save deployment-values.yaml, replacing registry, version, namespaces, ingress cl
 ```yaml
 operator:
   watchNamespaces: [team-a]
-  image: {repository: registry.example.com/shadok/operator, tag: "1.0.0"}
-  toolImage: {repository: registry.example.com/shadok/tools, tag: "1.0.0"}
+  image: {repository: registry.example.com/shadok/operator, tag: "1.1.0"}
+  toolImage: {repository: registry.example.com/shadok/tools, tag: "1.1.0"}
 gateway:
-  image: {repository: registry.example.com/shadok/gateway, tag: "1.0.0"}
+  image: {repository: registry.example.com/shadok/gateway, tag: "1.1.0"}
 ingress:
   enabled: true
   className: traefik

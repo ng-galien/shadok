@@ -52,4 +52,4 @@ Select the appropriate Deployment for the example; a destination is not an instr
 
 A sync ACK proves file application. Verify the example's HTTP response separately. When finished, stop its source watcher (`shadok unwatch --config shadok.yaml --group <group>`) or retained publication job, then disable the session and wait for baseline restoration. `shadok daemon stop` alone preserves jobs for its next start.
 
-See the [complete gateway networking guide](../operator-go/internal/guidance/topics/network.md) for platform exposure, daemon destination settings and diagnostics. It is included as `shadok learn network` in rebuilt CLIs; published 1.0.0 predates this topic.
+See the [complete gateway networking guide](../operator-go/internal/guidance/topics/network.md) for platform exposure, daemon destination settings and diagnostics. It is included as `shadok learn network` starting with CLI 1.1.0; published 1.0.0 predates this topic.

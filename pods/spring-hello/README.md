@@ -9,7 +9,7 @@ See the [volume walkthrough and commands](../../operator-go/internal/guidance/to
 
 ## Production to live, and back
 
-Read the [complete Spring walkthrough](../../operator-go/internal/guidance/topics/spring.md), also embedded as `shadok learn spring` / `shadok docs spring` in the next rebuilt CLI. It includes a complete DevelopmentSession YAML, destination setup, activation, build commands and restoration. The already published 1.0.0 binary does not yet contain this topic.
+Read the [complete Spring walkthrough](../../operator-go/internal/guidance/topics/spring.md), also embedded as `shadok learn spring` / `shadok docs spring` starting with CLI 1.1.0. It includes a complete DevelopmentSession YAML, destination setup, activation, build commands and restoration. The already published 1.0.0 binary does not yet contain this topic.
 
 The switch is explicit: the platform Deployment starts on the production image; the session's `spec.image` selects the compatible image with DevTools. Shadok saves the original PodTemplate and rolls out the live image with a classes volume seeded **from that live image**. Later builds update the volume; DevTools restarts Spring inside the same container. Disabling the session restores the production template through a rollout. Shadok does not inject DevTools into an arbitrary production JAR.
 

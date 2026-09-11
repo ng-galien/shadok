@@ -157,5 +157,9 @@ func TestMetadataAndExistingAccounts(t *testing.T) {
 	}
 }
 func TestUnsupportedKubernetes(t *testing.T) {
-	render(t, `{}`, "kubeVersion", "--kube-version", "1.33.0")
+	render(t, `{}`, "kubeVersion", "--kube-version", "1.24.0")
+}
+
+func TestKubernetesAPIFloor(t *testing.T) {
+	render(t, `{}`, "", "--kube-version", "1.25.0")
 }
