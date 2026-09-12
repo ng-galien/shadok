@@ -9,7 +9,7 @@ import (
 func TestInformationalCommandsDoNotStartDaemon(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "state")
 	t.Setenv("SHADOK_STATE_DIR", state)
-	for _, args := range [][]string{{}, {"--help"}, {"learn"}, {"learn", "install"}, {"docs", "schema"}, {"version"}, {"watch", "--help"}, {"receive", "--help"}, {"agent", "install", "--help"}} {
+	for _, args := range [][]string{{}, {"--help"}, {"learn"}, {"learn", "install"}, {"docs", "schema"}, {"version"}, {"watch", "--help"}, {"receive", "--help"}, {"agent", "install", "--help"}, {"upgrade", "cli", "--help"}, {"upgrade", "cluster", "--help"}, {"learn", "upgrade"}} {
 		if err := run(args); err != nil {
 			t.Errorf("%v: %v", args, err)
 		}

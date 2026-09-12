@@ -84,6 +84,45 @@ spec:
                 - IfNotPresent
                 - Never
                 type: string
+              init:
+                description: Ordered initialization commands; no framework-specific
+                  behavior is inferred.
+                items:
+                  description: |-
+                    InitStep runs after image directories are seeded and before the application starts.
+                    All declared live directories are mounted at their application mount paths.
+                  properties:
+                    args:
+                      items:
+                        type: string
+                      type: array
+                    command:
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                    image:
+                      minLength: 1
+                      type: string
+                    imagePullPolicy:
+                      enum:
+                      - Always
+                      - IfNotPresent
+                      - Never
+                      type: string
+                    name:
+                      maxLength: 51
+                      pattern: ^[a-z][a-z0-9-]*$
+                      type: string
+                    workingDir:
+                      type: string
+                  required:
+                  - command
+                  - image
+                  - name
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
               runAsGroup:
                 format: int64
                 minimum: 1

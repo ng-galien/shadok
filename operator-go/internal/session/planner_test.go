@@ -66,3 +66,45 @@ func TestCustomLiveImageSeedsFromOverride(t *testing.T) {
 		t.Fatal("tools override lost")
 	}
 }
+
+func TestInitializationRunsAfterSeedWithoutChangingProductionContainer(t *testing.T) {
+	d := &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+		Containers:     []corev1.Container{{Name: "app", Image: "production", VolumeMounts: []corev1.VolumeMount{{Name: "credentials", MountPath: "/credentials"}}}},
+		InitContainers: []corev1.Container{{Name: "platform-init", Image: "platform"}},
+	}}}}
+	s := &api.DevelopmentSession{Spec: api.SessionSpec{Container: "app", RunAsUser: 1000, RunAsGroup: 1000,
+		Directories: []api.Directory{{Name: "application", ImagePath: "/app", MountPath: "/live/app"}},
+		Init:        []api.InitStep{{Name: "extract", Image: "jdk", Command: []string{"jar"}, Args: []string{"xf", "application.jar"}, WorkingDir: "/live/app"}},
+		Start:       api.Start{Command: []string{"java"}},
+	}}
+	p, err := Plan(s, d, "tools")
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := []string{}
+	for _, c := range p.Spec.InitContainers {
+		names = append(names, c.Name)
+	}
+	if !reflect.DeepEqual(names, []string{"shadok-install", "shadok-seed", "shadok-init-extract", "platform-init"}) {
+		t.Fatal(names)
+	}
+	step := p.Spec.InitContainers[2]
+	if step.Image != "jdk" || step.WorkingDir != "/live/app" || len(step.VolumeMounts) != 1 || step.VolumeMounts[0].MountPath != "/live/app" {
+		t.Fatalf("wrong initialization: %+v", step)
+	}
+	if p.Spec.Containers[0].Image != "production" || p.Spec.InitContainers[1].Image != "production" {
+		t.Fatal("production image changed")
+	}
+	if *step.SecurityContext.RunAsUser != 1000 {
+		t.Fatal("wrong volume identity")
+	}
+	s.Spec.Init = append(s.Spec.Init, s.Spec.Init[0])
+	if _, err := Plan(s, d, "tools"); err == nil {
+		t.Fatal("duplicate initialization names accepted")
+	}
+	s.Spec.Init = s.Spec.Init[:1]
+	s.Spec.Init[0].Command = nil
+	if _, err := Plan(s, d, "tools"); err == nil {
+		t.Fatal("missing initialization command accepted")
+	}
+}

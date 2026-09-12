@@ -63,11 +63,12 @@ func TestExternalChangeIsNotOverwritten(t *testing.T) {
 	r.Get(ctx, client.ObjectKeyFromObject(d), d)
 	d.Spec.Template.Spec.Containers[0].Image = "external-upgrade"
 	r.Update(ctx, d)
-	if err := r.restore(ctx, s); err == nil {
-		t.Fatal("external change silently overwritten")
+	if err := r.restore(ctx, s); err != nil {
+		t.Fatal(err)
 	}
-	if err := r.enable(ctx, s); err == nil {
-		t.Fatal("external live change silently accepted")
+	// Re-enable starts from the externally updated baseline.
+	if err := r.enable(ctx, s); err != nil {
+		t.Fatal(err)
 	}
 	r.Get(ctx, client.ObjectKeyFromObject(d), d)
 	if d.Spec.Template.Spec.Containers[0].Image != "external-upgrade" {
@@ -101,13 +102,13 @@ func TestDeletingSessionRestoresBeforeFinalizerRemoval(t *testing.T) {
 	if err := r.Get(ctx, request.NamespacedName, s); err != nil {
 		t.Fatal(err)
 	}
-	if len(s.Finalizers) != 1 {
-		t.Fatal("missing restoration finalizer")
+	if len(s.Finalizers) != 0 {
+		t.Fatal("session must not block deletion")
 	}
 	if err := r.Delete(ctx, s); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Reconcile(ctx, request); err != nil {
+	if err := RecoverOrphans(ctx, r.Client, nil); err != nil {
 		t.Fatal(err)
 	}
 	r.Get(ctx, client.ObjectKeyFromObject(d), d)
@@ -233,5 +234,152 @@ func TestCustomImageRestoredAndUninstallGuard(t *testing.T) {
 	}
 	if len(s.Finalizers) != 0 {
 		t.Fatal("restored session retains finalizer")
+	}
+}
+
+func TestDeletionAfterDeploymentReplacement(t *testing.T) {
+	r, s, d := fixture(t)
+	ctx := context.Background()
+	request := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(s)}
+	for i := 0; i < 2; i++ {
+		if _, err := r.Reconcile(ctx, request); err != nil {
+			t.Fatal(err)
+		}
+	}
+	replacement := d.DeepCopy()
+	if err := r.Delete(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	replacement.ResourceVersion = ""
+	replacement.UID = "replacement"
+	if err := r.Create(ctx, replacement); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Get(ctx, request.NamespacedName, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Delete(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := RecoverOrphans(ctx, r.Client, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Get(ctx, request.NamespacedName, s); !apierrors.IsNotFound(err) {
+		t.Fatal("deletion blocked", err)
+	}
+	actual := &appsv1.Deployment{}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(replacement), actual); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(actual.Spec, replacement.Spec) {
+		t.Fatal("replacement modified")
+	}
+}
+
+func TestLegacyFinalizerMigratesToDurableRecovery(t *testing.T) {
+	r, s, d := fixture(t)
+	ctx := context.Background()
+	if err := r.enable(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	cm, err := r.baseline(ctx, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cm.Labels = nil
+	delete(cm.Data, "session")
+	cm.OwnerReferences = []metav1.OwnerReference{{APIVersion: s.APIVersion, Kind: "DevelopmentSession", Name: s.Name, UID: s.UID, Controller: ptr(true)}}
+	if err := r.Update(ctx, cm); err != nil {
+		t.Fatal(err)
+	}
+	s.Finalizers = []string{finalizer}
+	if err := r.Update(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Delete(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(s)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(s), s); !apierrors.IsNotFound(err) {
+		t.Fatal("legacy deletion stuck", err)
+	}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cm), cm); err != nil {
+		t.Fatal(err)
+	}
+	if len(cm.OwnerReferences) != 0 || cm.Data["session"] == "" {
+		t.Fatal("recovery record not detached")
+	}
+	if err := RecoverOrphans(ctx, r.Client, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(d), d); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Spec.Template.Spec.Containers) != 1 {
+		t.Fatal("live sidecar remains")
+	}
+}
+
+func TestCleanupRemovesEditedInjectedResources(t *testing.T) {
+	r, s, d := fixture(t)
+	ctx := context.Background()
+	if err := r.enable(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(d), d); err != nil {
+		t.Fatal(err)
+	}
+	d.Spec.Template.Spec.Containers[1].Image = "external-sidecar-edit"
+	d.Spec.Template.Spec.Containers[0].Env = append(d.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{Name: "NEW", Value: "keep"})
+	if err := r.Update(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.restore(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(d), d); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Spec.Template.Spec.Containers) != 1 || len(d.Spec.Template.Spec.InitContainers) != 0 || len(d.Spec.Template.Spec.Volumes) != 0 {
+		t.Fatal("injected resources retained")
+	}
+	if len(d.Spec.Template.Spec.Containers[0].Env) != 2 {
+		t.Fatal("external env lost")
+	}
+}
+
+func TestRecoveryRejectsCrossNamespaceRecord(t *testing.T) {
+	r, s, d := fixture(t)
+	ctx := context.Background()
+	if err := r.enable(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	cm, err := r.baseline(ctx, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := s.DeepCopy()
+	saved.Namespace = "another-team"
+	raw, _ := json.Marshal(saved)
+	cm.Data["session"] = string(raw)
+	if err := r.Update(ctx, cm); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Delete(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := RecoverOrphans(ctx, r.Client, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cm), cm); err != nil {
+		t.Fatal("invalid record discarded", err)
+	}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(d), d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Spec.Template.Annotations[liveAnnotation] == "" {
+		t.Fatal("mismatched record processed")
 	}
 }

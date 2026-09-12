@@ -18,7 +18,7 @@ import (
 //go:embed topics/*.md
 var topics embed.FS
 
-var topicNames = []string{"learn", "install", "network", "configure", "builds", "spring", "lifecycle", "chart"}
+var topicNames = []string{"learn", "spring", "quarkus", "node", "python", "install", "network", "upgrade", "lifecycle", "inspect", "configure", "builds", "verify", "chart"}
 
 const Help = `Shadok: live development for existing Kubernetes Deployments
 
@@ -27,12 +27,20 @@ Usage: shadok COMMAND [OPTIONS]
 Offline guidance (no daemon, network or cluster access):
   help, --help, -h            Show this command reference
   learn [TOPIC]              Agent onboarding, or a specific operational topic
-  docs [TOPIC]               install, network, configure, builds, spring, lifecycle, chart,
+  docs [TOPIC]               spring, quarkus, node, python, install, network, upgrade, lifecycle,
+                            inspect, configure, builds, verify, chart,
                             values, schema, crd, all (default: topic index)
   chart export DIRECTORY    Export the complete embedded Helm chart to a new directory
   agent install|status|uninstall [--client codex|claude] [--path DIRECTORY]
                             Manage the embedded skill (default client: codex)
   version, --version        Show the embedded build version
+
+Upgrade commands:
+  upgrade cli [--version VERSION] [--output PATH]
+                            Verify and install a published CLI (default: latest)
+  upgrade cluster --context CONTEXT [--release NAME] [--namespace NAME]
+                  [--values FILE] [--backup-dir DIRECTORY] [--dry-run]
+                            Upgrade an existing installation to this CLI version
 
 Development commands:
   watch                     Start continuous source synchronization
@@ -119,7 +127,7 @@ func Document(topic string) ([]byte, error) {
 			return topics.ReadFile("topics/" + topic + ".md")
 		}
 	}
-	return nil, fmt.Errorf("unknown documentation topic %q; available: learn, install, network, configure, builds, spring, lifecycle, chart, values, schema, crd, all", topic)
+	return nil, fmt.Errorf("unknown documentation topic %q; available: learn, spring, quarkus, node, python, install, network, upgrade, lifecycle, inspect, configure, builds, verify, chart, values, schema, crd, all", topic)
 }
 
 func Print(w io.Writer, topic string) error {

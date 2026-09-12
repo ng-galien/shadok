@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0
+
+- Add `shadok upgrade cli` with release checksum verification and atomic binary replacement.
+- Add `shadok upgrade cluster` with explicit context, Helm values backup/preservation, CRD updates and dry-run support.
+- Remove the Shadok deletion finalizer from sessions. Independent recovery records support cleanup after session or CRD deletion, including operator downtime. Existing finalizers are handled automatically.
+- Preserve external Deployment changes during cleanup and leave replacement Deployments intact.
+- Use Spring Boot 4.1.1 with layered production images and external DevTools. Live tests cover endpoint additions/deletion without container restarts and production restoration.
+- Add ordered `DevelopmentSession.spec.init` steps to prepare live directories inside the pod, including extracting Spring application JARs with a standard JDK while keeping the production image.
+- Support Quarkus live activation from a production fast-jar image with separately mounted framework resources. Live tests verify the original application JAR, endpoint additions/removals without container restarts, and production restoration.
+- Provide self-contained operational guides for Spring Boot, Quarkus, Node.js/TypeScript and Python, plus installation, networking, deletion and upgrades.
+
 ## 1.1.0
 
 - Add offline `shadok learn spring` and `shadok learn network` guides covering live activation, production restoration, gateway exposure, DNS/TLS and daemon destinations.

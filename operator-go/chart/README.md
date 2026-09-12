@@ -83,10 +83,27 @@ Gateway authentication is not built in. Protect access at the ingress/proxy or t
 
 NetworkPolicy requires an enforcing CNI. Empty `gatewayIngressFrom`/`metricsIngressFrom` permits any source on the listed ports; populate selectors/IP blocks for your platform. API service and endpoint addresses may both be needed depending on CNI NAT ordering. Application namespace policies must permit gateway-to-receiver traffic separately; the chart does not take ownership of application networking. Node probes and DNS arrangements should be checked on the target CNI.
 
-Before an upgrade, back up the CRs and baseline ConfigMaps, review CRD schema changes, apply `chart/crds` explicitly, then upgrade the release. Helm installs CRDs from `crds/` but does not upgrade or delete them. Do not use force replacement to work around CRD compatibility failures. Schema changes must remain compatible with existing sessions; no conversion webhook is provided.
+Use `shadok upgrade cluster --context CONTEXT --namespace NAMESPACE --release RELEASE` from the desired release CLI. It saves Helm values/manifests, applies the embedded CRD and upgrades with preserved operational values. `--dry-run` renders and validates without applying. For manual upgrades, back up CRs and recovery ConfigMaps, review CRD changes, apply `chart/crds`, then upgrade the release. Helm installs CRDs from `crds/` but does not upgrade or delete them. Do not use force replacement to work around CRD compatibility failures. Schema changes must remain compatible with existing sessions; no conversion webhook is provided.
 
-Before uninstall, set every managed session to `enabled: false` and wait for `Ready=True` with reason `Baseline` and the finalizer to disappear. Check application rollouts. The hook blocks uninstall until this is done; do not bypass it with `--no-hooks` during live sessions. A failed hook Job remains for diagnosis and is replaced on retry. Helm rollback changes chart resources, not already-applied CRD schemas or application source content. Test upgrades and rollback with the versions used by your platform.
+Before uninstall, set every managed session to `enabled: false` and wait for `Ready=True` with reason `Baseline` and application restoration to complete. Check application rollouts. The hook blocks uninstall until this is done; do not bypass it with `--no-hooks` during live sessions. A failed hook Job remains for diagnosis and is replaced on retry. Helm rollback changes chart resources, not already-applied CRD schemas or application source content. Test upgrades and rollback with the versions used by your platform.
 
 References: [Helm CRD lifecycle](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/), [chart schema](https://helm.sh/docs/topics/charts/), [OCI registries](https://helm.sh/docs/topics/registries/).
 
 The Kubernetes 1.25 chart floor comes from the CRD CEL transition rule that keeps the target Deployment immutable (`CustomResourceValidationExpressions`, enabled by default since 1.25). See [Kubernetes CEL immutability](https://kubernetes.io/blog/2022/09/29/enforce-immutability-using-cel/). This is an API requirement, not a claim that every version above it has passed runtime integration tests. Runtime validation currently covers Kubernetes 1.36; Helm rendering checks the 1.25 floor separately.
+
+New sessions have no Shadok deletion finalizer. Independent recovery ConfigMaps survive session/CRD deletion and enable asynchronous cleanup after operator restart. Existing legacy finalizers are removed automatically after preserving their recovery data. See `shadok learn lifecycle`.
+
+## Initialize seeded directories
+
+Use `session.init` (or `spec.init` on DevelopmentSession) for ordered startup preparation with a standard tool image:
+
+```yaml
+session:
+  init:
+    - name: unpack
+      image: eclipse-temurin:21-jdk
+      command: [sh]
+      args: [-ec, 'mkdir -p /live/classes; cd /live/classes; jar --extract --file /live/packaged/application.jar']
+```
+
+Each step mounts the session's declared directories at their `mountPath`, uses the session UID/GID and runs after `shadok-seed`, before the original platform init containers and application. Failure prevents application startup; inspect that init container's logs. The application image remains unchanged. The complete Spring guide supplies the directory mappings and live command; this fragment only illustrates the chart field.

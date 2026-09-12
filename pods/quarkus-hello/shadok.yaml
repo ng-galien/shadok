@@ -4,8 +4,14 @@ groups:
   quarkus-outputs:
     mode: build
     roots:
-      - mount: classes
-        path: build/classes/java/main
-      - mount: resources
-        path: build/resources/main
-        optional: true
+      - mount: application
+        path: build/shadok-sync
+        exclude:
+          - lib
+          - lib/**
+          - app
+          - app/**
+          - quarkus
+          - quarkus/**
+          - '*.jar'
+          - quarkus-app-dependencies.txt

@@ -149,7 +149,28 @@ func Plan(s *api.DevelopmentSession, d *appsv1.Deployment, image string) (*corev
 	if s.Spec.Start.WorkingDir != "" {
 		app.WorkingDir = s.Spec.Start.WorkingDir
 	}
-	pod.Spec.InitContainers = append([]corev1.Container{install, seed}, pod.Spec.InitContainers...)
+	initializers := []corev1.Container{install, seed}
+	initNames := map[string]bool{}
+	for _, step := range s.Spec.Init {
+		if !syncer.ValidMount(step.Name) || len(step.Name) > 51 || initNames[step.Name] || strings.TrimSpace(step.Image) == "" || len(step.Command) == 0 {
+			return nil, fmt.Errorf("invalid initialization step %q", step.Name)
+		}
+		if step.WorkingDir != "" && !validPath(step.WorkingDir) {
+			return nil, fmt.Errorf("invalid initialization workingDir %q", step.WorkingDir)
+		}
+		switch step.ImagePullPolicy {
+		case "", "Always", "IfNotPresent", "Never":
+		default:
+			return nil, fmt.Errorf("invalid initialization imagePullPolicy %q", step.ImagePullPolicy)
+		}
+		initNames[step.Name] = true
+		c := corev1.Container{Name: "shadok-init-" + step.Name, Image: step.Image, ImagePullPolicy: corev1.PullPolicy(step.ImagePullPolicy), Command: append([]string{}, step.Command...), Args: append([]string{}, step.Args...), WorkingDir: step.WorkingDir, SecurityContext: toolSC.DeepCopy(), Resources: *resources.DeepCopy()}
+		for _, directory := range s.Spec.Directories {
+			c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{Name: "shadok-live-" + directory.Name, MountPath: directory.MountPath})
+		}
+		initializers = append(initializers, c)
+	}
+	pod.Spec.InitContainers = append(initializers, pod.Spec.InitContainers...)
 	pod.Spec.Containers = append(pod.Spec.Containers, receiver)
 	return pod, nil
 }

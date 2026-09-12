@@ -1,13 +1,14 @@
-FROM eclipse-temurin:21-jre AS live
+FROM eclipse-temurin:21-jre AS builder
+WORKDIR /builder
+COPY target/spring-hello-0.1.0.jar application.jar
+RUN java -Djarmode=tools -jar application.jar extract --layers --destination extracted
+
+FROM eclipse-temurin:21-jre AS production
 WORKDIR /app
-COPY target/classes /app/classes
-COPY target/lib /app/lib
+COPY --from=builder /builder/extracted/dependencies/ ./
+COPY --from=builder /builder/extracted/spring-boot-loader/ ./
+COPY --from=builder /builder/extracted/snapshot-dependencies/ ./
+COPY --from=builder /builder/extracted/application/ ./
 USER 1000:1000
 EXPOSE 8080
-ENTRYPOINT ["java", "-cp", "/app/classes:/app/lib/*", "example.Application"]
-
-# Production baseline excludes the development restart mechanism entirely.
-FROM live AS production
-USER root
-RUN rm /app/lib/spring-boot-devtools-*.jar
-USER 1000:1000
+ENTRYPOINT ["java", "-jar", "/app/application.jar"]

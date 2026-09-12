@@ -1,80 +1,76 @@
-# Configure a live session and destination
+# Write the target project's Shadok configuration
 
-Inspect the existing Deployment's container name, image paths, start command, UID/GID, readiness probes, imagePullSecrets and existing mounts. A session transforms that Deployment in place. It preserves routing labels, sidecars, environment, resources and volumes; mounting collisions and incompatible identities are rejected. Disable sessions before an application upgrade or GitOps change to the PodTemplate.
+Complete `shadok learn inspect` and the runtime guide first. Replace every uppercase placeholder below with an inspected value.
 
-Example session for an existing non-root Node application named orders in team-a. Its image must contain /app/src and Node, and support UID/GID 1000. Adapt all runtime details to the application; Shadok does not supply Node.
+## 1. Create the session manifest
 
 ```yaml
 apiVersion: shadok.org/v1alpha1
 kind: DevelopmentSession
 metadata:
-  name: orders-live
-  namespace: team-a
+  name: SESSION_NAME
+  namespace: APPLICATION_NAMESPACE
 spec:
   enabled: false
-  deployment: orders
-  container: app
+  deployment: EXISTING_DEPLOYMENT
+  container: EXISTING_CONTAINER
   runAsUser: 1000
   runAsGroup: 1000
   directories:
     - name: application
-      imagePath: /app/src
-      mountPath: /app/src
+      imagePath: /VERIFIED/IMAGE/DIRECTORY
+      mountPath: /LIVE/DIRECTORY
   start:
-    command: [node]
-    args: [--watch, src/server.js]
-    workingDir: /app
+    command: [EXECUTABLE]
+    args: [ARGUMENT_1, ARGUMENT_2]
+    workingDir: /VERIFIED/WORKING/DIRECTORY
 ```
 
-Save as session.yaml and apply with kubectl. `spec.deployment` is immutable and must name a Deployment in the same namespace. Directory names match local `roots[].mount`; imagePath is seeded from the application image, mountPath is its live destination. Paths must be absolute. An optional `spec.image` selects a development application image for both application and seed init container. `spec.imagePullPolicy` may override its policy. Disabling restores the original image/policy with the whole saved template.
+Save as `session.yaml` in the target project or add these values through its existing chart. Replace UID/GID as well as paths. Keep `spec.image` absent to retain the production image.
 
-Alternatively set `session.create: true` and the corresponding `session.*` chart values. Additional session-only Helm releases use `operator.enabled: false`; they must not install duplicate infrastructure.
+| Field | What the agent must configure |
+| --- | --- |
+| `deployment`, `container` | Existing workload and application container |
+| `directories[].name` | Logical name reused by `roots[].mount` in the local config |
+| `imagePath` | Existing directory copied from the image to initialize the volume |
+| `mountPath` | Directory mounted in the application for synchronized files |
+| `start.command/args` | Exact executable and arguments established by the runtime guide |
+| `workingDir` | Directory needed for relative imports, classpath or application paths |
 
-Project-owned shadok.yaml contains portable groups and local paths, relative to the config file:
+**`imagePath` copies a directory; it does not extract JARs, install dependencies or infer frameworks.** For archives, configure `spec.init` with a standard tooling image and extraction command as shown in the complete Spring guide. A mount seeded from a verified empty image directory must be populated before the application starts.
+
+Volume/tool provisioning belongs in the existing platform Deployment. `spec.init` runs ordered initialization containers after seeding and mounts the declared live directories. It does not import application artifacts from another image or invent a framework configuration. Extra platform tool volumes remain declared in the existing Deployment. `spec.image`, when explicitly selected, changes both application and seed image.
+
+## 2. Map local files
+
+Create `shadok.yaml` in the application repository:
 
 ```yaml
 version: 1
-project: orders
+project: PROJECT_NAME
 groups:
-  source:
-    mode: watch
+  service:
+    mode: build
     roots:
       - mount: application
-        path: src
-        exclude: ["**/*.swp", "**/*~"]
+        path: ACTUAL_BUILD_OUTPUT_DIRECTORY
 ```
 
-Keep the personal destination outside committed project configuration. Set SHADOK_DESTINATIONS to an explicit YAML path (otherwise the OS user config directory contains shadok/destinations.yaml):
+Use paths relative to this file. Use `mode: watch` only for source trees that can be consumed directly by the live process. Each root mirrors its directory, including deletions; do not include dependencies or files owned by the image in that root.
 
-```yaml
-version: 1
-destinations:
-  my-cluster:
-    url: https://sync.example.com
-    namespace: team-a
-    deployment: orders
-    # caFile: /absolute/path/to/private-ca.pem
-```
+## 3. Select the destination
+
+Follow `shadok learn network`. The destination names the gateway origin, application namespace and Deployment, not the session name.
+
+## 4. Apply and activate
 
 ```sh
-export SHADOK_DESTINATIONS="$HOME/.config/shadok/destinations.yaml"
-export SHADOK_DESTINATION=my-cluster
-kubectl apply -f session.yaml
-kubectl -n team-a patch developmentsession orders-live --type merge -p '{"spec":{"enabled":true}}'
-kubectl -n team-a get developmentsession orders-live -o yaml
-kubectl -n team-a rollout status deployment/orders --timeout=120s
-shadok watch --config shadok.yaml --group source
-shadok status
+kubectl --context "$CONTEXT" apply -f session.yaml
+kubectl --context "$CONTEXT" -n "$NAMESPACE" patch developmentsession "$SESSION" \
+  --type merge -p '{"spec":{"enabled":true}}'
+kubectl --context "$CONTEXT" -n "$NAMESPACE" get developmentsession "$SESSION" -o yaml
 ```
 
-Check Ready=True and status.observedGeneration matches metadata.generation, then check rollout separately: Ready means the template was applied, not that the application is ready. Reliable application readiness matters for runtimes that initialize a reload watcher during startup.
+Verify Ready=True for the current observed generation, then check application readiness and its URL. Do not publish into a session whose bootstrap/startup has failed.
 
-The CLI starts/reuses a private local daemon. `watch` waits for the initial ACK then the daemon continues scanning once per second. Change a known response, inspect status for matching snapshot.manifest.revision and ack.revision with no error, and request the application through its normal route. Check a replacement Pod also receives the revision. Explicit destination flags are also supported: `--url`, `--namespace`, `--deployment`, `--ca-file`. No kubeconfig is used by this sync path. Developer Kubernetes permission can be limited to session resources; operator and gateway use separate service accounts.
-
-Stop a group with the same config, group and destination: `shadok unwatch --config shadok.yaml --group source`. This removes its retained snapshot but does not disable its Kubernetes session. `shadok daemon stop` stops the process but retains saved jobs and snapshots in its state directory. The next CLI command that starts the daemon resumes those jobs. Use `unwatch` before stopping when a group must not resume. If retained state was removed or a snapshot is missing, run watch/publish again to recreate it. SHADOK_STATE_DIR selects the private local daemon directory; default is the OS user cache directory plus shadok.
-
-## Spring production/live walkthrough
-
-Run `shadok learn spring` (or `shadok docs spring`) for the complete production-to-DevTools procedure, including a platform-prepared read-only DevTools volume with no image override, the separate-live-image alternative, build publication, class additions/deletions and production restoration.
-
-For gateway exposure, DNS/TLS, destination settings and connectivity diagnosis, run `shadok learn network`.
+Run the configured build/watch command from `shadok learn builds`, then perform `shadok learn verify`.

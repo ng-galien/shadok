@@ -42,8 +42,8 @@ for verb,resource in [('get','secrets'),('get','pods'),('patch','deployments'),(
 def toggle(enabled):return kub('-n',NS,'patch','developmentsession',name,'--type=merge','-p',json.dumps({'spec':{'enabled':enabled}}),'--as',identity)
 stack=args.stack;name=stack;port={'baseline':8080,'node':3000,'python':8000,'spring':8080,'ts':8080,'vite':8080}[stack]
 mount='classes' if stack=='spring' else 'application'
-image_path={'baseline':'/app','node':'/app/src','python':'/app/src','spring':'/app/classes','ts':'/app/dist','vite':'/app/src'}[stack]
-commands={'baseline':['python','-m','http.server','8080','--directory','/app'],'node':['./node_modules/.bin/nodemon','--legacy-watch','src/app.js'],'python':['python','-m','uvicorn','main:app','--host','0.0.0.0','--port','8000','--reload','--reload-dir','/app/src'],'spring':['java','-cp','/app/classes:/app/lib/*:/opt/devtools/*','example.Application'],'ts':['node','--watch','dist/server.js'],'vite':['./node_modules/.bin/vite','--host','0.0.0.0','--port','8080']}
+image_path={'baseline':'/app','node':'/app/src','python':'/app/src','spring':'/tmp','ts':'/app/dist','vite':'/app/src'}[stack]
+commands={'baseline':['python','-m','http.server','8080','--directory','/app'],'node':['./node_modules/.bin/nodemon','--legacy-watch','src/app.js'],'python':['python','-m','uvicorn','main:app','--host','0.0.0.0','--port','8000','--reload','--reload-dir','/app/src'],'spring':['java','-cp','/live/classes:/live/packaged/unpacked/BOOT-INF/lib/*:/app/lib/*:/opt/devtools/*','example.Application'],'ts':['node','--watch','dist/server.js'],'vite':['./node_modules/.bin/vite','--host','0.0.0.0','--port','8080']}
 # A platform-owned Deployment exists before the Shadok release; no generated dev Deployment.
 d={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':name,'namespace':NS},'spec':{'replicas':2 if stack=='baseline' else 1,'selector':{'matchLabels':{'app':name}},'template':{'metadata':{'labels':{'app':name},'annotations':{'platform.example/retained':'yes'}},'spec':{'containers':[{'name':'app','image':f'shadok-{stack}:local','imagePullPolicy':'IfNotPresent','env':[{'name':'PLATFORM_VALUE','value':'preserved'}],'resources':{'requests':{'cpu':'10m','memory':'32Mi'},'limits':{'memory':'512Mi' if stack=='spring' else '256Mi'}}}]}}}}
 try:
@@ -73,23 +73,34 @@ kub('-n',NS,'rollout','status','deployment/'+name,'--timeout=120s');original=get
 if stack=='spring':
     baseline_pod=next(x for x in get('pods','')['items'] if x['metadata'].get('labels',{}).get('app')==name and not x['metadata'].get('deletionTimestamp'))
     baseline_logs=kub('-n',NS,'logs',baseline_pod['metadata']['name'],'-c','app')
-    baseline_libs=kub('-n',NS,'exec',baseline_pod['metadata']['name'],'-c','app','--','ls','/app/lib')
-    assert 'spring-boot-devtools' not in baseline_libs and 'restartedMain' not in baseline_logs,'baseline must not use DevTools'
+    baseline_files=kub('-n',NS,'exec',baseline_pod['metadata']['name'],'-c','app','--','ls','-A','/app').splitlines()
+    assert baseline_files==['application.jar','lib'],'production /app must use the efficient layered JAR layout'
+    import zipfile
+    with zipfile.ZipFile(ROOT/'pods/spring-hello/target/spring-hello-0.1.0.jar') as jar:
+        assert not any('spring-boot-devtools' in name for name in jar.namelist()),'DevTools packaged in production jar'
+        assert 'BOOT-INF/classes/example/Application.class' in jar.namelist()
+    cmdline=kub('-n',NS,'exec',baseline_pod['metadata']['name'],'-c','app','--','cat','/proc/1/cmdline')
+    assert cmdline.split('\x00')[:3]==['java','-jar','/app/application.jar'],'baseline is not java -jar'
+    assert 'restartedMain' not in baseline_logs,'baseline loaded DevTools'
     baseline_image_id=next(c['imageID'] for c in baseline_pod['status']['containerStatuses'] if c['name']=='app')
     kub('-n',NS,'exec',baseline_pod['metadata']['name'],'-c','app','--','test','-r','/opt/devtools/spring-boot-devtools.jar')
-    print('PASS Spring production baseline: no DevTools in application libraries; external JAR mounted but not loaded',flush=True)
+    print('PASS Spring production baseline: java -jar, layered application JAR and lib directory, no packaged DevTools; external JAR not loaded',flush=True)
 with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
     base=pathlib.Path(td);src=base/'src';src.mkdir();forwards=[]
     # Self-signed TLS is scoped to this isolated test; the client validates it explicitly.
     cert=base/'ca.crt';key=base/'tls.key'
     subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(key),'-out',str(cert),'-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     secret=json.loads(kub('-n',SYSTEM,'create','secret','tls','gateway-tls','--cert',str(cert),'--key',str(key),'--dry-run=client','-o','json'));apply(secret)
-    values={'operator':{'image':{'tag':'local'},'toolImage':{'tag':'local'}},'gateway':{'image':{'tag':'local'},'tlsSecretName':'gateway-tls'},'session':{'create':True,'namespace':NS,'name':name,'enabled':False,'deployment':name,'container':'app','runAsUser':1000,'runAsGroup':1000,'directories':[{'name':mount,'imagePath':image_path,'mountPath':image_path}],'start':{'command':commands[stack][:1],'args':commands[stack][1:],'workingDir':'/app'}}}
+    values={'operator':{'image':{'tag':'local'},'toolImage':{'tag':'local'}},'gateway':{'image':{'tag':'local'},'tlsSecretName':'gateway-tls'},'session':{'create':True,'namespace':NS,'name':name,'enabled':False,'deployment':name,'container':'app','runAsUser':1000,'runAsGroup':1000,'directories':[{'name':mount,'imagePath':image_path,'mountPath':'/live/classes' if stack=='spring' else image_path}],'start':{'command':commands[stack][:1],'args':commands[stack][1:],'workingDir':'/app'}}}
     if RELEASE:
         values['operator']={}
         values['gateway'].pop('image')
         values['service']={'type':'NodePort','nodePort':30443}
-    if stack=='spring':values['session']['image']=''
+    if stack=='spring':
+        spring_spec=json.loads(kub('create','--dry-run=client','-f',str(ROOT/'pods/spring-hello/kubernetes/session.yaml'),'-o','json'))['spec']
+        values['session']['image']=''
+        values['session']['directories']=spring_spec['directories']
+        values['session']['init']=spring_spec['init']
     # One infrastructure release, then instance-only releases for additional targets.
     if stack!='baseline':values['operator']={'enabled':False}
     vf=base/'values.json';vf.write_text(json.dumps(values));release='runtime' if stack=='baseline' else stack
@@ -101,6 +112,14 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
             if ns==SYSTEM:return 18443
             kub('-n',ns,'patch',target,'--type=merge','-p',json.dumps({'spec':{'type':'NodePort','ports':[{'port':remote,'targetPort':remote,'nodePort':30081}]}}))
             return 18081
+        if ns==SYSTEM and target=='service/runtime-shadok':
+            # Port-forward the live gateway pod, not a terminating replica selected from the Service.
+            selector=get('deployment','runtime-shadok-gateway',SYSTEM)['spec']['selector']['matchLabels']
+            candidates=[p for p in get('pods','',SYSTEM)['items'] if all(p['metadata'].get('labels',{}).get(k)==v for k,v in selector.items()) and not p['metadata'].get('deletionTimestamp') and any(c.get('type')=='Ready' and c.get('status')=='True' for c in p.get('status',{}).get('conditions',[]))]
+            assert len(candidates)==1, 'expected one ready runtime gateway pod'
+            target_port=next(p['targetPort'] for p in get('service','runtime-shadok',SYSTEM)['spec']['ports'] if p['port']==remote)
+            remote=target_port if isinstance(target_port,int) else next(p['containerPort'] for c in candidates[0]['spec']['containers'] for p in c.get('ports',[]) if p['name']==target_port)
+            target='pod/'+candidates[0]['metadata']['name']
         proc=subprocess.Popen(K+['-n',ns,'port-forward','--address=127.0.0.1',target,f':{remote}'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True);forwards.append(proc)
         line=proc.stdout.readline();m=re.search(r'127.0.0.1:(\d+)',line);assert m,(line,proc.stderr.read());return int(m.group(1))
     gateway='https://localhost:'+str(forward(SYSTEM,'service/runtime-shadok',80));tls=ssl.create_default_context(cafile=str(cert))
@@ -127,7 +146,9 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
         assert next(c['imageID'] for c in live_pod['status']['containerStatuses'] if c['name']=='app')==baseline_image_id,'application image digest changed'
         mounts=live['template']['spec']['containers'][0]['volumeMounts']
         assert any(m['mountPath']=='/opt/devtools' and m.get('readOnly') for m in mounts),'DevTools not read-only'
-        print('PASS Spring live activation: same production image digest, DevTools from read-only PVC',flush=True)
+        init_status=next(c for c in live_pod['status']['initContainerStatuses'] if c['name']=='shadok-init-unpack')
+        assert init_status['state']['terminated']['exitCode']==0,'JDK initialization did not complete'
+        print('PASS Spring live activation: same production image digest, JAR extracted inside Pod by standard JDK init, only DevTools from read-only PVC',flush=True)
     if stack!='baseline':
         demo=ROOT/f'pods/{stack}-hello'
         if stack in ('spring','ts'):
@@ -221,7 +242,7 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
             def removed_controller():
                 return response(new_route)[0]==404
             wait(removed_controller,'deleted controller route removed by DevTools')
-            kub('-n',NS,'exec',before['metadata']['name'],'-c','app','--','test','!','-e','/app/classes/example/AddedController.class')
+            kub('-n',NS,'exec',before['metadata']['name'],'-c','app','--','test','!','-e','/live/classes/example/AddedController.class')
             assert app_identity(pods()[0])==before_identity,'controller deletion restarted/replaced container'
             wait(lambda:response('/added-method')==(200,b'new-method-live'),'remaining route preserved')
             print('PASS Spring DevTools: deleted controller .class absent in Pod, route 200 -> 404; remaining method still responds; same Pod and container',flush=True)

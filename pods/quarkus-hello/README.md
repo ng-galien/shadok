@@ -1,23 +1,24 @@
-# Quarkus application example
+# Quarkus build fixture
 
-This application demonstrates REST endpoints, Kubernetes deployment configuration and a Gradle hook for publishing completed class/resource outputs.
+## Build the production JVM package
 
-Run from this example directory (`pods/quarkus-hello`), with JDK 17 or newer:
+Run from this directory with JDK 17+:
+
+```sh
+./gradlew quarkusBuild -Dquarkus.container-image.build=false -Dquarkus.package.jar.type=fast-jar
+docker build -f src/main/docker/Dockerfile.jvm -t shadok-quarkus:local .
+```
+
+This is a normal fast-jar image. It does not contain Quarkus's remote-dev deployment libraries/model. Live mode supplies only the matching framework resources through a read-only volume; application code remains sourced from this image.
+
+## Local development
 
 ```sh
 ./gradlew quarkusDev
-./gradlew test
-./gradlew build
 ```
 
-The REST endpoints are `/hello` and `/hello/json`; health is exposed through `/q/health`. Application and image configuration is in `src/main/resources/application.properties`. Inspect build/image settings before invoking a task configured to build or push containers.
+## Build-output staging
 
-The optional `shadokPublish` task depends on classes and tests, then invokes `shadok publish --config shadok.yaml --group quarkus-outputs`. Install the CLI on PATH and configure the personal destination first. Use `shadok learn` for the complete build and synchronization workflow.
+`stageShadok` uses Gradle's standard `Sync` task to stage compiled application classes/resources at `build/shadok-sync/dev/app`. `shadokPublish` depends on that task and invokes `shadok publish` for the configured destination. The complete live test also provisions the framework resources required by remote dev.
 
-A successful Gradle hook demonstrates output publication, not remote Quarkus dev mode. The selected application image and start command must supply a compatible reload mechanism; Shadok does not infer one from the language.
-
-The Gradle wrapper, version catalog, build settings and `shadok.yaml` belong to this example. The wrapper downloads the pinned, checksum-verified Gradle distribution on first use. `./gradlew spotlessCheck` checks formatting locally. No Gradle installation or root Gradle project is needed by Shadok itself.
-
-Open http://localhost:8080/hello during `./gradlew quarkusDev`; stop with Ctrl+C. For the build hook, follow the [shared session and destination setup](../README.md#before-synchronizing-an-example). Its `classes` and `resources` mounts publish the output roots in this example's `shadok.yaml`.
-
-The supplied JVM Dockerfile packages `build/quarkus-app` as a normal Quarkus application. It does not establish a remote live classpath/restart arrangement for those two mounts. The platform must provide a compatible development image and live command before using the hook for reload; the local Quarkus test and hook dry-run do not validate remote dev mode.
+For operating on another project's existing image, use the complete [Quarkus guide](../../operator-go/internal/guidance/topics/quarkus.md), including framework resource preparation and all YAML files. See [the live validation procedure](../../docs/QUARKUS_LIVE_VALIDATION.md) for this fixture.

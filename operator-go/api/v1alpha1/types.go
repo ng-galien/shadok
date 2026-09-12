@@ -26,6 +26,23 @@ type Start struct {
 	Args       []string `json:"args,omitempty"`
 	WorkingDir string   `json:"workingDir,omitempty"`
 }
+
+// InitStep runs after image directories are seeded and before the application starts.
+// All declared live directories are mounted at their application mount paths.
+type InitStep struct {
+	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9-]*$`
+	// +kubebuilder:validation:MaxLength=51
+	Name string `json:"name"`
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image"`
+	// +kubebuilder:validation:Enum=Always;IfNotPresent;Never
+	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
+	// +kubebuilder:validation:MinItems=1
+	Command    []string `json:"command"`
+	Args       []string `json:"args,omitempty"`
+	WorkingDir string   `json:"workingDir,omitempty"`
+}
+
 type SessionSpec struct {
 	// Enable live transformation of the existing Deployment; false restores its baseline.
 	Enabled bool `json:"enabled"`
@@ -47,6 +64,9 @@ type SessionSpec struct {
 	// +listMapKey=name
 	Directories []Directory `json:"directories"`
 	Start       Start       `json:"start"`
+	// Ordered initialization commands; no framework-specific behavior is inferred.
+	// +listType=atomic
+	Init []InitStep `json:"init,omitempty"`
 	// A session-specific UID/GID for shared emptyDir writes. Must match the baseline runtime.
 	// +kubebuilder:validation:Minimum=1
 	RunAsUser int64 `json:"runAsUser"`

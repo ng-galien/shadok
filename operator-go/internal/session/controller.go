@@ -30,19 +30,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if err := r.Get(ctx, req.NamespacedName, s); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	if !s.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(s, finalizer) {
-			if err := r.restore(ctx, s); err != nil {
-				return ctrl.Result{}, err
-			}
-			controllerutil.RemoveFinalizer(s, finalizer)
-			return ctrl.Result{}, r.Update(ctx, s)
+	// Migrate existing installations before releasing their legacy finalizer.
+	if controllerutil.ContainsFinalizer(s, finalizer) {
+		if err := r.persistRecovery(ctx, s); err != nil {
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		controllerutil.RemoveFinalizer(s, finalizer)
+		if err := r.Update(ctx, s); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
-	if s.Spec.Enabled && !controllerutil.ContainsFinalizer(s, finalizer) {
-		controllerutil.AddFinalizer(s, finalizer)
-		return ctrl.Result{}, r.Update(ctx, s)
+	if !s.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, nil
 	}
 	before := s.DeepCopy()
 	var err error
@@ -66,10 +65,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if e := r.Status().Patch(ctx, s, client.MergeFrom(before)); e != nil {
 		return ctrl.Result{}, e
 	}
-	if err == nil && !s.Spec.Enabled && controllerutil.ContainsFinalizer(s, finalizer) {
-		controllerutil.RemoveFinalizer(s, finalizer)
-		return ctrl.Result{}, r.Update(ctx, s)
-	}
 	if err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "session transition failed")
 	}
@@ -86,7 +81,7 @@ func (r *Reconciler) baseline(ctx context.Context, s *api.DevelopmentSession) (*
 	err := r.Get(ctx, client.ObjectKey{Namespace: s.Namespace, Name: baselineName(s)}, cm)
 	if err == nil {
 		owner := metav1.GetControllerOf(cm)
-		if owner == nil || owner.UID != s.UID {
+		if cm.Labels[recoveryLabel] != string(s.UID) && (owner == nil || owner.UID != s.UID) {
 			return nil, fmt.Errorf("baseline ownership conflict")
 		}
 	}
@@ -113,9 +108,7 @@ func (r *Reconciler) enable(ctx context.Context, s *api.DevelopmentSession) erro
 		}
 		raw, _ := json.Marshal(d.Spec.Template)
 		cm = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: baselineName(s), Namespace: s.Namespace}, Data: map[string]string{"template": string(raw), "deploymentUID": string(d.UID)}}
-		if err = controllerutil.SetControllerReference(s, cm, r.Scheme()); err != nil {
-			return err
-		}
+		markRecovery(cm, s)
 		if err = r.Create(ctx, cm); err != nil {
 			return err
 		}
@@ -198,30 +191,34 @@ func (r *Reconciler) restore(ctx context.Context, s *api.DevelopmentSession) err
 	}
 	d, err := r.deployment(ctx, s)
 	if apierrors.IsNotFound(err) {
-		return r.Delete(ctx, cm)
+		return client.IgnoreNotFound(r.Delete(ctx, cm))
 	}
 	if err != nil {
 		return err
 	}
 	if cm.Data["deploymentUID"] != string(d.UID) {
-		return fmt.Errorf("Deployment UID changed; baseline restoration requires reconciliation")
+		// A different object must never receive the old object's baseline.
+		// Only retain protection if it still carries this session's live marker.
+		if d.Spec.Template.Annotations[liveAnnotation] == string(s.UID) {
+			return fmt.Errorf("replacement Deployment still carries this session's live marker; recovery record retained")
+		}
+		return client.IgnoreNotFound(r.Delete(ctx, cm))
 	}
 	var original corev1.PodTemplateSpec
 	if err = json.Unmarshal([]byte(cm.Data["template"]), &original); err != nil {
 		return err
 	}
 	if d.Spec.Template.Annotations[liveAnnotation] == string(s.UID) {
-		if err = checkApplied(cm, d); err != nil {
-			return err
-		}
 		before := d.DeepCopy()
-		d.Spec.Template = original
+		restored, restoreErr := restoreTemplate(cm, d.Spec.Template, original)
+		if restoreErr != nil {
+			return restoreErr
+		}
+		d.Spec.Template = restored
 		if err = r.Patch(ctx, d, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{})); err != nil {
 			return err
 		}
-	} else if !reflect.DeepEqual(d.Spec.Template, original) {
-		return fmt.Errorf("external template change: refusing to overwrite with saved baseline")
-	}
+	} // No live ownership marker: leave external configuration untouched.
 	return client.IgnoreNotFound(r.Delete(ctx, cm))
 }
 func (r *Reconciler) SetupWithManager(m ctrl.Manager) error {

@@ -61,7 +61,15 @@ func main() {
 	must((&session.Reconciler{Client: m.GetClient(), ToolImage: *image}).SetupWithManager(m))
 	must(m.AddHealthzCheck("ping", healthz.Ping))
 	must(m.AddReadyzCheck("ping", healthz.Ping))
-	must(m.Start(ctrl.SetupSignalHandler()))
+	ctx := ctrl.SetupSignalHandler()
+	recoveryClient, err := client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: s})
+	must(err)
+	var recoveryNamespaces []string
+	if *namespaces != "" {
+		recoveryNamespaces = strings.Split(*namespaces, ",")
+	}
+	go session.RunRecovery(ctx, recoveryClient, recoveryNamespaces)
+	must(m.Start(ctx))
 }
 func must(err error) {
 	if err != nil {

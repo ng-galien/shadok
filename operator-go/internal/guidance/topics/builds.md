@@ -1,76 +1,49 @@
-# Build integrations
+# Build and synchronization command reference
 
-Use `mode: watch` for editable source files, and `mode: build` for completed compiler outputs. Shadok transfers files; the application's image and command must provide the corresponding reload behavior. It does not install language dependencies or rebuild container images.
+The complete runtime guides (`spring`, `quarkus`, `node`, `python`) provide their own configuration and commands. Use this reference to integrate an already working command into your build tool or CI.
 
-For TypeScript output in dist, configure:
+## 1. Run a build and publish only its successful output
 
-```yaml
-version: 1
-project: orders
-groups:
-  service:
-    mode: build
-    roots:
-      - mount: application
-        path: dist
+```sh
+shadok build --config shadok.yaml --group service \
+  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT" \
+  -- YOUR_BUILD_COMMAND YOUR_BUILD_ARGUMENTS
 ```
 
-Map the session's application directory to the runtime's output directory, for example imagePath/mountPath /app/dist, and use the application's actual development command. A package.json can contain:
+Arguments before `--` belong to Shadok. The command after `--` runs in the current directory. Shadok starts or reuses its daemon, executes the build, snapshots the configured output roots after success and waits for a file-application acknowledgement. A failed build publishes nothing.
 
-```json
-{"scripts":{"build":"tsc","build:cluster":"shadok build --config shadok.yaml --group service -- npm run build"}}
+Use the build command established by the runtime guide; an arbitrary `mvn verify` does not create a Quarkus staging directory. There is no implicit Maven profile, Gradle plugin or generated npm script.
+
+## 2. Publish from an existing successful-build hook
+
+```sh
+shadok publish --config shadok.yaml --group service \
+  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
 ```
 
-`shadok build` runs the command in the current working directory, holds a cooperative project build lock and captures a snapshot after success. Failed builds publish nothing. `shadok publish --config shadok.yaml --group service` is appropriate in a successful build hook: it captures completed outputs and waits for that revision's ACK. Hook-only workflows must prevent concurrent writers of the same output directories. All CLI flags must precede `--`, then the build command and its arguments follow. Put the same shadok executable on the PATH used by the build tool.
+Run only after the build and any required staging step succeed. The hook must prevent concurrent writes to its output directories while they are captured. Do not combine the hook with `shadok build` around the same build: that would publish twice.
 
-For Node source, use the source group from `shadok docs configure` and an npm script `"dev:cluster": "shadok watch --config shadok.yaml --group source"`. For Python, use a watch group rooted at your source directory and configure an image/start command with a real file reload mechanism (for example the application's existing development server). Plain Python execution does not acquire automatic reload simply because files change. Vite similarly needs its dev server running in the application image; verify browser HMR separately from file delivery.
+## 3. Watch directly executable source files
 
-For Maven/Spring, map target/classes to a directory included in the JVM classpath. Provide the required libraries and Spring DevTools either in the image or through a platform-prepared read-only volume. Configure a JVM classpath/start command and readiness probe matching that layout. Example project group:
-
-```yaml
-version: 1
-project: service
-groups:
-  service:
-    mode: build
-    roots:
-      - mount: classes
-        path: target/classes
+```sh
+shadok watch --config shadok.yaml --group source \
+  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
 ```
 
-The simplest wrapper is `shadok build --group service -- mvn verify`. For a successful Maven lifecycle hook, add this optional profile to the POM and run `mvn -Pshadok verify`:
+The group must use `mode: watch`. The application must already run the appropriate reload server. Do not watch compiler output while compilation is writing a partially updated set; use a successful-build boundary.
 
-```xml
-<profile>
-  <id>shadok</id>
-  <build><plugins><plugin>
-    <groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.6.3</version>
-    <inherited>false</inherited>
-    <executions><execution><id>publish-live</id><phase>verify</phase><goals><goal>exec</goal></goals>
-      <configuration><executable>shadok</executable><arguments>
-        <argument>publish</argument><argument>--config</argument><argument>${project.basedir}/shadok.yaml</argument>
-        <argument>--group</argument><argument>service</argument>
-      </arguments></configuration>
-    </execution></executions>
-  </plugin></plugins></build>
-</profile>
+## 4. CI environment
+
+Install the CLI on PATH. Supply the gateway origin, application namespace/Deployment and optional `--ca-file` for private TLS. The daemon does not need Kubernetes credentials. Keep builds for one output directory serialized.
+
+A persistent daemon retains the latest snapshot and can resend after pod replacement. An ephemeral CI job must publish again when its daemon/state have gone away. File delivery does not prove application reload: make an HTTP assertion against the application URL.
+
+## 5. Inspect or stop synchronization
+
+```sh
+shadok status
+shadok unwatch --config shadok.yaml --group service \
+  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
 ```
 
-Place that profile inside `<profiles>`; do not combine it with a wrapper that would publish twice. For multi-module builds, select the module containing the actual runtime outputs. Dependency changes require a compatible image/dependency update, not merely transferring classes.
-
-Gradle Kotlin DSL for a Java project's completed classes/resources:
-
-```kotlin
-tasks.register<Exec>("shadokPublish") {
-    dependsOn(tasks.named("classes"), tasks.named("test"))
-    workingDir(project.projectDir)
-    commandLine("shadok", "publish", "--config",
-        project.file("shadok.yaml").absolutePath, "--group", "service")
-}
-```
-
-Configure separate roots for build/classes/java/main and build/resources/main if both exist, with matching session directory names and classpath entries. Run `./gradlew shadokPublish`; failed dependencies prevent publication. Alternatively wrap the successful build with `shadok build --group service -- ./gradlew build`. This hook proves publication, not a framework-specific remote restart; verify the application's actual response.
-
-## Spring production/live walkthrough
-
-Run `shadok learn spring` (or `shadok docs spring`) for the complete production-to-DevTools procedure, including a platform-prepared read-only DevTools volume with no image override, the separate-live-image alternative, build publication, class additions/deletions and production restoration.
+`unwatch` removes this synchronization job; it does not disable the DevelopmentSession. Restore production using the runtime guide's final chapter. `shadok daemon stop` stops all jobs of the local daemon, so use it only when that is intended.

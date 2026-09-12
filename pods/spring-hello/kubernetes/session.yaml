@@ -6,14 +6,31 @@ spec:
   enabled: false
   deployment: spring
   container: app
-  # No image override: keep the production image.
   runAsUser: 1000
   runAsGroup: 1000
   directories:
+    - name: packaged
+      imagePath: /app
+      mountPath: /live/packaged
     - name: classes
-      imagePath: /app/classes
-      mountPath: /app/classes
+      imagePath: /tmp
+      mountPath: /live/classes
+  init:
+    - name: unpack
+      image: eclipse-temurin:21-jdk
+      command: [sh]
+      args:
+        - -ec
+        - |
+          mkdir -p /live/packaged/unpacked
+          cd /live/packaged/unpacked
+          jar --extract --file /live/packaged/application.jar
+          if [ -d BOOT-INF/classes ]; then
+            cp -R BOOT-INF/classes/. /live/classes/
+          else
+            cp -R . /live/classes/
+          fi
   start:
     command: [java]
-    args: [-cp, '/app/classes:/app/lib/*:/opt/devtools/*', example.Application]
+    args: [-cp, '/live/classes:/live/packaged/unpacked/BOOT-INF/lib/*:/app/lib/*:/opt/devtools/*', example.Application]
     workingDir: /app

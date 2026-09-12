@@ -146,7 +146,7 @@ func TestDocumentsAndConfigurationExamples(t *testing.T) {
 		t.Fatal("accepted unknown topic")
 	}
 	// Parse portable group examples through the real runtime config loader.
-	for _, topic := range []string{"configure", "builds"} {
+	for _, topic := range []string{"configure", "spring", "quarkus", "node", "python"} {
 		b, _ := Document(topic)
 		chunks := strings.Split(string(b), "```yaml\n")
 		found := 0

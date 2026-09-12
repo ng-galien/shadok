@@ -1,21 +1,38 @@
-# Operate Shadok with this binary
+# Shadok operating guides
 
-Shadok temporarily transforms an existing Kubernetes Deployment for live development and restores its saved PodTemplate when disabled. The operator is runtime-agnostic: the application image provides the tools and dependencies; a DevelopmentSession declares directories and its live command. The CLI starts a local daemon and sends file revisions over HTTP(S) to the gateway. It does not use Kubernetes credentials for synchronization. There is no editor extension to install.
+## 1. Put your application into live mode
 
-Start with `shadok --help` and `shadok version`. All instructions below are embedded in this binary and work offline:
+Choose **one** guide. Each contains the image inspection, required files, YAML configuration, build/sync commands, verification and return to production. Run it in your application's repository; no Shadok source checkout or sample is required.
 
-- `shadok docs install`: inspect the target cluster, export the bundled chart, configure images/networking, install and verify.
-- `shadok learn network`: connect the daemon to the gateway through DNS, TLS and Ingress; configure destinations and troubleshoot connectivity.
-- `shadok docs configure`: create a session, project groups and a personal destination; enable and verify live mode.
-- `shadok docs builds`: working Node, TypeScript, Python, Maven and Gradle integration examples.
-- `shadok learn spring`: keep the production image and load DevTools from a read-only volume, or select a separate live image; compile/synchronize and restore.
-- `shadok docs lifecycle`: upgrades, restoration, uninstall, troubleshooting and current limits.
-- `shadok docs chart`: full chart reference; `shadok docs values`, `shadok docs schema` and `shadok docs crd` expose the actual bundled assets.
-- `shadok docs all`: all operational topics and the chart reference in one output.
-- `shadok chart export ./shadok-chart`: materialize every chart template, schema and CRD without a checkout.
-- `shadok agent install --client codex`: install a minimal skill that directs the agent to `shadok learn`. Operational documentation stays in the binary. Claude is supported with `--client claude`; `--path DIRECTORY` selects an exact skill directory for other clients.
-- `shadok agent status --client codex`: verify managed files against their recorded hashes and this binary. `agent uninstall` removes only an unchanged managed installation.
+| Your application | Complete guide |
+| --- | --- |
+| Spring Boot JVM, Maven or Gradle | `shadok learn spring` |
+| Quarkus JVM, Maven or Gradle | `shadok learn quarkus` |
+| Node.js, TypeScript or Vite | `shadok learn node` |
+| Python | `shadok learn python` |
 
-For an agent: inspect the actual application Deployment, build outputs, requested cluster context and existing releases before choosing configuration. Continue authorized setup through a real application change, revision ACK, application response and restoration check. Use existing session authorization; ask only for genuinely missing target/credentials or additional external publication. A successful Helm test proves gateway TCP reachability, not application reload. Keep project-specific instructions outside the installed skill directory.
+Start with the production image and Deployment actually used by your project. Keep the existing chart/Helmfile, routing and configuration. The platform must supply any missing runtime tools; file synchronization alone cannot add reload behavior to an arbitrary image.
 
-Reading help/docs never starts a daemon, touches a cluster or downloads anything. Installation needs kubectl/Helm and cluster permissions; workloads need accessible container images. This binary supplies the chart and instructions, not container image layers or cluster credentials. Do not invent a published registry URL: use the supplied release's image references or ask the platform owner for them.
+## 2. Administer Shadok — platform team
+
+| Task | Guide |
+| --- | --- |
+| Install the operator, gateway and permissions | `shadok learn install` |
+| Expose the sync gateway through DNS, TLS and Ingress | `shadok learn network` |
+| Update the CLI or cluster installation | `shadok learn upgrade` |
+| Disable/delete sessions and restore applications | `shadok learn lifecycle` |
+
+Developers can have permissions only on DevelopmentSessions. They supply required tool/mount configuration to the platform; they do not reproduce or replace the platform's deployments. Synchronization clients need gateway access, not Kubernetes credentials.
+
+## 3. Reference — optional
+
+| Subject | Command |
+| --- | --- |
+| Image/workload inspection checklist | `shadok docs inspect` |
+| Session fields and root mapping | `shadok docs configure` |
+| Additional build-tool integration patterns | `shadok docs builds` |
+| HTTP reload and restoration checks | `shadok docs verify` |
+| Exact installed CRD / Helm configuration | `shadok docs crd`, `values`, `schema`, `chart` |
+| Export the matching chart | `shadok chart export ./shadok-chart` |
+
+These references supplement the complete runtime guides. They are not prerequisites to assembling a working configuration. All guides are embedded in the CLI and available offline.

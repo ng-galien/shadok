@@ -11,7 +11,7 @@ These applications demonstrate language-specific build and reload commands. Shad
 | [Spring](spring-hello/README.md) | Compile JVM classes, publish through Maven, reload with DevTools |
 | [Quarkus](quarkus-hello/README.md) | JVM application and Gradle build hook |
 
-Use `shadok learn` for the complete operating workflow and build examples. The repository's application tests cover file publication and application responses; browser HMR and remote Quarkus dev mode require separate verification.
+Use `shadok learn` for the complete operating workflow and build examples. The repository's application tests cover file publication and application responses; browser HMR requires a browser-level check. The [Quarkus live test](../docs/QUARKUS_LIVE_VALIDATION.md) verifies its production-image and framework-resource setup.
 
 A demo should keep its source, application build configuration, runtime image, tests and usage guide together. Application images must provide the selected reload tool and command. The platform Deployment owns secrets, environment, resource settings and image pull credentials; the session selects the container and mounted directories.
 
@@ -28,7 +28,7 @@ Run each example's commands from its own directory. Each example owns its build 
 | Spring | `mvn verify` | `mvn -Pshadok verify` |
 | Quarkus | `./gradlew test` | `./gradlew shadokPublish` |
 
-The former root Gradle convenience tasks have been retired in favor of these native commands. For Quarkus, replace root `./gradlew :pods:quarkus-hello:<task>` with `cd pods/quarkus-hello` and `./gradlew <task>`. Node/Python/Quarkus configuration previously shared in root `shadok.yaml` now lives alongside each example; group names, mounts and watched/build paths are preserved. Configure a destination and activate the session before running sync commands. Stop existing daemon jobs using the old configuration before switching to the new per-example configuration.
+Each sample owns its build tooling and `shadok.yaml`. Run commands from the sample directory. For Quarkus, use `cd pods/quarkus-hello` and `./gradlew <task>`. Configure a destination and activate the session before running sync commands.
 
 ## Before synchronizing an example
 
@@ -52,4 +52,4 @@ Select the appropriate Deployment for the example; a destination is not an instr
 
 A sync ACK proves file application. Verify the example's HTTP response separately. When finished, stop its source watcher (`shadok unwatch --config shadok.yaml --group <group>`) or retained publication job, then disable the session and wait for baseline restoration. `shadok daemon stop` alone preserves jobs for its next start.
 
-See the [complete gateway networking guide](../operator-go/internal/guidance/topics/network.md) for platform exposure, daemon destination settings and diagnostics. It is included as `shadok learn network` starting with CLI 1.1.0; published 1.0.0 predates this topic.
+See the [complete gateway networking guide](../operator-go/internal/guidance/topics/network.md) for platform exposure, daemon destination settings and diagnostics. Run `shadok learn network` to read it in the CLI.

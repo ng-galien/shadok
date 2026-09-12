@@ -53,6 +53,8 @@ func run(args []string) error {
 			topic = args[1]
 		}
 		return guidance.Print(os.Stdout, topic)
+	case "upgrade":
+		return upgrade(args[1:])
 	case "chart":
 		if len(args) != 3 || args[1] != "export" {
 			return fmt.Errorf("usage: shadok chart export DIRECTORY")

@@ -63,3 +63,7 @@ Only a pushed `v*` tag starts `.github/workflows/release.yml`. The guard checks 
 After full verification, the workflow prepares CLI archives and chart, publishes AMD64/ARM64 images under `ghcr.io/ng-galien/shadok`, pushes the chart to `oci://ghcr.io/ng-galien/shadok/charts`, verifies the chart round trip and image platforms, and attaches checksummed artifacts to the GitHub release. A draft release keeps an interrupted publication visibly incomplete; reruns may resume a draft but cannot overwrite a published release. Registry pushes are not transactional, so a failed run may leave images or a chart available before the GitHub release is published.
 
 Shadok uses the root MIT license. Before authorizing the first tag, verify GHCR package visibility/access. Creating or pushing a branch does not create `v1.0.0` or publish any release.
+
+## CLI-assisted updates
+
+Use `shadok upgrade cli` (verified GitHub release download and atomic replacement) and `shadok upgrade cluster --context CONTEXT` (backup, CRD application and existing Helm release upgrade). See the [upgrade guide](../operator-go/internal/guidance/topics/upgrade.md).

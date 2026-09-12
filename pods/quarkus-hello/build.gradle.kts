@@ -1,7 +1,7 @@
 plugins {
     id("java")
     alias(libs.plugins.spotless)
-    id("io.quarkus") version "3.8.1"
+    id("io.quarkus") version "3.39.3"
 }
 
 repositories {
@@ -15,8 +15,8 @@ val quarkusPlatformVersion: String by project
 
 dependencies {
     implementation(enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"))
-    implementation("io.quarkus:quarkus-resteasy-reactive")
-    implementation("io.quarkus:quarkus-resteasy-reactive-jackson")
+    implementation("io.quarkus:quarkus-rest")
+    implementation("io.quarkus:quarkus-rest-jackson")
     implementation("io.quarkus:quarkus-kubernetes")
     implementation("io.quarkus:quarkus-kubernetes-config")
     implementation("io.quarkus:quarkus-kubernetes-client")
@@ -47,11 +47,18 @@ tasks.withType<JavaCompile> {
     options.compilerArgs.add("-parameters")
 }
 
-// Optional CLI integration; never publishes an image or runs after a failed dependency.
+// Keep a complete mirror of reloadable application outputs, separate from runtime libraries.
+val stageShadok by tasks.registering(Sync::class) {
+    dependsOn(tasks.named("classes"), tasks.named("test"))
+    into(layout.buildDirectory.dir("shadok-sync/dev/app"))
+    from(sourceSets.main.get().output)
+}
+
+// Publication follows successful compilation and tests.
 tasks.register<Exec>("shadokPublish") {
     group = "development"
     description = "Publish completed class/resource outputs to a Shadok session"
-    dependsOn(tasks.named("classes"), tasks.named("test"))
+    dependsOn(stageShadok)
     workingDir(rootProject.projectDir)
     commandLine("shadok", "publish", "--config",
         rootProject.file("shadok.yaml").absolutePath, "--group", "quarkus-outputs")

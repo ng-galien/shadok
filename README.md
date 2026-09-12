@@ -41,37 +41,25 @@ flowchart TB
 
 The operator prepares the live environment; it does not compile the application or transport the build files. An init container copies configured paths from the baseline image into shared volumes before the application starts with its live command. Subsequent file updates use those volumes, without rebuilding the application image for every edit. The application's own runtime handles reload or restart.
 
-### From a successful build to a live update
+## Operating guides for application agents
 
-A workstation or CI job uses the same CLI. For example, after configuring a `service` build group in `shadok.yaml`:
+Choose one complete guide and work in your application's repository. Each includes inspection of the production image, required YAML files, activation, build/sync, HTTP reload checks and restoration. No sample checkout is required.
 
-```sh
-shadok build --config shadok.yaml --group service \
-  --url https://sync.example.com --namespace dev --deployment orders \
-  -- mvn verify
-```
+| Application | Guide | Offline command |
+| --- | --- | --- |
+| Spring Boot JVM | [Spring Boot](operator-go/internal/guidance/topics/spring.md) | `shadok learn spring` |
+| Quarkus JVM | [Quarkus](operator-go/internal/guidance/topics/quarkus.md) | `shadok learn quarkus` |
+| Node.js / TypeScript / Vite | [Node](operator-go/internal/guidance/topics/node.md) | `shadok learn node` |
+| Python | [Python](operator-go/internal/guidance/topics/python.md) | `shadok learn python` |
 
-Replace the final command with your Gradle or npm build. The CLI starts or reuses its daemon, captures an immutable snapshot **only after success**, sends changed files and deletions, and waits for acknowledgement. A failed build leaves the last published revision intact. This is a stream of file revisions, not a stream of container images. For source-driven runtimes, `shadok watch` follows the configured source directories instead.
+## Platform administration
 
-The runner needs the CLI, the project configuration and network access to the gateway. The target session must already be active. A persistent daemon keeps reconciling the latest snapshot after a pod replacement; an ephemeral CI runner must publish again if its daemon and retained state are gone. Acknowledgement confirms file delivery, not that the application has reloaded: verify its response separately. See the [build contract](docs/DAEMON_BUILD_CONTRACT.md) for the details.
+- [Install Shadok](operator-go/internal/guidance/topics/install.md): operator, gateway and chart.
+- [Expose the gateway](operator-go/internal/guidance/topics/network.md): DNS, TLS, Ingress and destination.
+- [Upgrade](operator-go/internal/guidance/topics/upgrade.md): CLI and cluster installation.
+- [Restore and delete sessions](operator-go/internal/guidance/topics/lifecycle.md).
 
-## Operator and runtime
-
-Shadok enables live development on an **existing Kubernetes Deployment**. The Go operator saves its original Pod template, injects temporary directories and a synchronization receiver, and restores the template when the session ends. Existing Services and routing remain usable.
-
-`DevelopmentSession` describes a container, directories, a start command, and an optional development image. Runtime and framework behavior belongs to the application image, not an operator language catalog. The CLI and daemon send files over HTTP(S) through the gateway; builds remain local and failed builds are not published. The daemon requires no Kubernetes credentials.
-
-Install a published version using the [release installation guide](docs/INSTALL_RELEASE.md): GitHub CLI downloads, GHCR Helm installation, Kind setup and application configuration.
-
-## Start with the binary
-
-```sh
-shadok --help
-shadok learn
-shadok docs install
-```
-
-Operational guidance is embedded in the executable. It covers cluster installation, configuration, source watching, successful-build hooks, verification, troubleshooting and restoration. Use `shadok chart export ./shadok-chart` to materialize the bundled chart without a source checkout. Registry images must be explicitly selected from a release you trust; documentation does not assume an unpublished public registry exists.
+Run `shadok learn` for the offline index or `shadok chart export ./shadok-chart` to export the matching chart.
 
 ## Develop and verify
 
@@ -103,8 +91,14 @@ The API is `v1alpha1`. Protect the gateway through a trusted network or an authe
 
 Shadok is licensed under the [MIT License](LICENSE).
 
-For Spring Boot, follow the [production-to-DevTools live walkthrough](operator-go/internal/guidance/topics/spring.md) and [real reload evidence](docs/SPRING_LIVE_VALIDATION.md). The walkthrough is included as `shadok learn spring` starting with CLI 1.1.0; published 1.0.0 predates this topic.
+For Spring Boot, follow the [production-to-DevTools live walkthrough](operator-go/internal/guidance/topics/spring.md) and [real reload evidence](docs/SPRING_LAYERED_IMAGE_VALIDATION.md). `shadok learn spring` includes the walkthrough.
 
-Spring can also keep its production image and load DevTools from a platform-mounted read-only volume: [same-image live proof](docs/SPRING_VOLUME_VALIDATION.md).
+This Spring scenario keeps its production image and load DevTools from a platform-mounted read-only volume: [same-image live proof](docs/SPRING_LAYERED_IMAGE_VALIDATION.md).
 
-See the [complete gateway networking guide](operator-go/internal/guidance/topics/network.md) for platform exposure, daemon destination settings and diagnostics. It is included as `shadok learn network` starting with CLI 1.1.0; published 1.0.0 predates this topic.
+See the [complete gateway networking guide](operator-go/internal/guidance/topics/network.md) for platform exposure, daemon destination settings and diagnostics. Run `shadok learn network` to read it in the CLI.
+
+## Updating Shadok
+
+Use `shadok upgrade cli` and `shadok upgrade cluster --context CONTEXT --namespace shadok-system --release shadok`. See the [upgrade guide](operator-go/internal/guidance/topics/upgrade.md) for checksums, Helm values preservation, backups and dry runs.
+
+Session deletion does not wait for a Shadok finalizer: see [live deletion validation](docs/SESSION_DELETION_VALIDATION.md).
