@@ -10,10 +10,11 @@ export NAMESPACE=YOUR_APPLICATION_NAMESPACE
 export DEPLOYMENT=YOUR_EXISTING_DEPLOYMENT
 export IMAGE=YOUR_IMMUTABLE_PRODUCTION_IMAGE
 export SYNC_URL=https://YOUR_SYNC_GATEWAY
+export SYNC_CA="" # Set an absolute PEM CA path only for a private gateway CA.
 export APP_URL=https://YOUR_APPLICATION_HOST
 ```
 
-Create `live/session.yaml` and `shadok.yaml` using the chapters below. The synchronization client needs gateway access, not Kubernetes credentials.
+Create `live/session.yaml` using the chapters below. The synchronization client needs gateway access, not Kubernetes credentials.
 
 ## 2. Inspect the Python environment
 
@@ -76,6 +77,8 @@ spec:
     - name: application
       imagePath: /app/src
       mountPath: /app/src
+      localPath: src
+      exclude: ['**/__pycache__', '**/__pycache__/**', '**/*.pyc']
   start:
     command: [python]
     args: [-m, uvicorn, 'main:app', --app-dir, /app/src, --host, 0.0.0.0, --port, '8000', --reload, --reload-dir, /app/src]
@@ -88,26 +91,9 @@ For Django or Flask, replace `start` with the corresponding command from chapter
 
 ## 5. Create the source mapping
 
-`shadok.yaml`:
+Set `localPath` on the session directory to the source directory relative to the CLI working directory. The gateway supplies that mapping and its exclusions to the client. No local YAML is needed. Keep virtual environments and credentials outside the mirrored tree.
 
-```yaml
-version: 1
-project: YOUR_PROJECT
-groups:
-  source:
-    mode: watch
-    roots:
-      - mount: application
-        path: src
-        exclude:
-          - '**/__pycache__'
-          - '**/__pycache__/**'
-          - '**/*.pyc'
-```
-
-Replace `src` with the corresponding directory in the application repository. Paths are relative to this file. Do not include `.venv`, credentials, unrelated packages or generated caches. Root files missing locally are deleted remotely; the mapping must contain the complete intended application source tree.
-
-For generated source, use `mode: build` and `shadok build ... -- YOUR_GENERATION_COMMAND` instead of watching half-written output. Changing dependencies requires updating the runtime environment; transferring source does not install requirements.
+For generated source, use `shadok build ... -- YOUR_GENERATION_COMMAND` after activation instead of watching partially generated output.
 
 ## 6. Activate and start synchronization
 
@@ -122,12 +108,12 @@ curl -i "$APP_URL/YOUR_EXISTING_ENDPOINT"
 Wait for `Ready=True` for the current generation and an application response. Then:
 
 ```sh
-shadok watch --config shadok.yaml --group source \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
+shadok watch --session "$NAMESPACE/python-live" \
+  --url "$SYNC_URL" --ca-file "$SYNC_CA"
 shadok status
 ```
 
-For a private gateway CA, append `--ca-file /path/to/company-ca.pem`. Use the gateway origin for synchronization and the application's URL for HTTP checks.
+For a private gateway CA, set `SYNC_CA` to its absolute PEM file path; otherwise leave it empty. Use the gateway origin for synchronization and the application's URL for HTTP checks.
 
 ## 7. Verify changes, additions and deletions
 
@@ -150,9 +136,11 @@ Pod UID, application container ID and restart count must remain unchanged. The P
 
 ## 8. Restore production
 
+Run from the same project directory as publication/watch, with the same `SYNC_URL` and `SYNC_CA`. These values identify the local synchronization job.
+
 ```sh
-shadok unwatch --config shadok.yaml --group source \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
+shadok unwatch --session "$NAMESPACE/python-live" \
+  --url "$SYNC_URL" --ca-file "$SYNC_CA"
 kubectl --context "$CONTEXT" -n "$NAMESPACE" patch developmentsession python-live \
   --type merge -p '{"spec":{"enabled":false}}'
 kubectl --context "$CONTEXT" -n "$NAMESPACE" get developmentsession python-live -o yaml

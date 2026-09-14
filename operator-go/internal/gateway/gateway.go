@@ -1,4 +1,4 @@
-// Package gateway routes unauthenticated experimental sync by namespace/Deployment.
+// Package gateway routes sync to a DevelopmentSession and its live receivers.
 package gateway
 
 import (
@@ -49,11 +49,37 @@ func (k KubernetesResolver) Resolve(ctx context.Context, ns, deployment string) 
 	if session == nil {
 		return nil, fmt.Errorf("target not configured or not live")
 	}
+	return k.targets(ctx, session)
+}
+
+func (k KubernetesResolver) Session(ctx context.Context, ns, name string) (*api.DevelopmentSession, error) {
+	if len(k.Namespaces) > 0 && !k.Namespaces[ns] {
+		return nil, fmt.Errorf("namespace outside configured scope")
+	}
+	s := &api.DevelopmentSession{}
+	if err := k.Reader.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, s); err != nil {
+		return nil, err
+	}
+	if !s.Spec.Enabled || !s.DeletionTimestamp.IsZero() {
+		return nil, fmt.Errorf("session is not live")
+	}
+	return s, nil
+}
+
+func (k KubernetesResolver) ResolveSession(ctx context.Context, ns, name string) ([]Target, error) {
+	s, err := k.Session(ctx, ns, name)
+	if err != nil {
+		return nil, err
+	}
+	return k.targets(ctx, s)
+}
+
+func (k KubernetesResolver) targets(ctx context.Context, session *api.DevelopmentSession) ([]Target, error) {
 	if !session.Spec.Enabled || !session.DeletionTimestamp.IsZero() {
 		return nil, fmt.Errorf("target is not live")
 	}
 	pods := &corev1.PodList{}
-	if err := k.Reader.List(ctx, pods, client.InNamespace(ns), client.MatchingLabels{"shadok.org/session": string(session.UID)}); err != nil {
+	if err := k.Reader.List(ctx, pods, client.InNamespace(session.Namespace), client.MatchingLabels{"shadok.org/session": string(session.UID)}); err != nil {
 		return nil, err
 	}
 	targets := []Target{}
@@ -93,16 +119,53 @@ type Handler struct {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "POST required", 405)
-		return
-	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) != 3 || len(validation.IsDNS1123Label(parts[0])) != 0 || len(validation.IsDNS1123Subdomain(parts[1])) != 0 || (parts[2] != "plan" && parts[2] != "apply") {
-		http.NotFound(w, r)
-		return
+	var targets []Target
+	var err error
+	if len(parts) >= 3 && parts[0] == "sessions" && !(len(parts) == 3 && r.Method == http.MethodPost) {
+		resolver, ok := h.Resolver.(interface {
+			Session(context.Context, string, string) (*api.DevelopmentSession, error)
+			ResolveSession(context.Context, string, string) ([]Target, error)
+		})
+		if !ok || len(validation.IsDNS1123Label(parts[1])) != 0 || len(validation.IsDNS1123Subdomain(parts[2])) != 0 {
+			http.NotFound(w, r)
+			return
+		}
+		if len(parts) == 3 && r.Method == "GET" {
+			session, e := resolver.Session(r.Context(), parts[1], parts[2])
+			if e != nil {
+				http.Error(w, e.Error(), 409)
+				return
+			}
+			roots := []syncer.Root{}
+			for _, d := range session.Spec.Directories {
+				if d.LocalPath != "" {
+					roots = append(roots, syncer.Root{Mount: d.Name, Path: d.LocalPath, Exclude: d.Exclude})
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(struct {
+				Roots []syncer.Root `json:"roots"`
+			}{roots})
+			return
+		}
+		if len(parts) != 4 || r.Method != "POST" || (parts[3] != "plan" && parts[3] != "apply") {
+			http.NotFound(w, r)
+			return
+		}
+		targets, err = resolver.ResolveSession(r.Context(), parts[1], parts[2])
+		parts = []string{parts[1], parts[2], parts[3]}
+	} else {
+		if r.Method != "POST" {
+			http.Error(w, "POST required", 405)
+			return
+		}
+		if len(parts) != 3 || len(validation.IsDNS1123Label(parts[0])) != 0 || len(validation.IsDNS1123Subdomain(parts[1])) != 0 || (parts[2] != "plan" && parts[2] != "apply") {
+			http.NotFound(w, r)
+			return
+		}
+		targets, err = h.Resolver.Resolve(r.Context(), parts[0], parts[1])
 	}
-	targets, err := h.Resolver.Resolve(r.Context(), parts[0], parts[1])
 	if err != nil {
 		http.Error(w, err.Error(), 409)
 		return

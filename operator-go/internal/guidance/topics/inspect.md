@@ -60,7 +60,7 @@ Never synchronize a whole application directory if that would delete image-owned
 ## 4. Check prerequisites before activation
 
 - Runtime tools exist at the exact paths used by the live command.
-- Extra tools are supplied by a platform volume or an explicitly selected compatible image; Shadok does not install them automatically.
+- Declare additional tool files with HTTPS URLs and SHA256 checksums in `spec.volumes[].files`: the operator downloads and mounts them before startup. For an existing platform volume, declare its source in `spec.volumes`. Other missing runtime dependencies need an explicitly prepared compatible environment.
 - Session UID/GID match the application. A PVC needs the existing compatible fsGroup.
 - Live mount paths do not overlap existing mounts.
 - The live command keeps the application's bind address, port and required JVM/runtime flags.

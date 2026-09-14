@@ -13,8 +13,16 @@ spec:
       imagePath: /app
       mountPath: /live/packaged
     - name: classes
-      imagePath: /tmp
       mountPath: /live/classes
+      localPath: target/classes
+  volumes:
+    - name: devtools
+      mountPath: /opt/devtools
+      readOnly: true
+      files:
+        - path: spring-boot-devtools.jar
+          url: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-devtools/4.1.1/spring-boot-devtools-4.1.1.jar
+          sha256: 5aa3b3f253248d38e8785651b0bb33c5b71032612780456c62841ce0f034cc58
   init:
     - name: unpack
       image: eclipse-temurin:21-jdk

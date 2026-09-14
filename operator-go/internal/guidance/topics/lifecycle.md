@@ -2,8 +2,12 @@
 
 ## Restore production
 
+Run from the same project directory used for publication/watch. Reuse its gateway URL and CA file. Replace the example namespace, session and Deployment below with your target.
+
 ```sh
-shadok unwatch --config shadok.yaml --group source
+export SHADOK_URL=https://sync.example.com
+export SYNC_CA="" # Use the same absolute CA file path as publication, if any.
+shadok unwatch --session team-a/orders-live --ca-file "$SYNC_CA"
 kubectl -n team-a patch developmentsession orders-live --type merge -p '{"spec":{"enabled":false}}'
 kubectl -n team-a get developmentsession orders-live -o yaml
 ```
@@ -51,10 +55,10 @@ Run `shadok learn upgrade` for CLI and cluster update commands.
 | Symptom | Check |
 | --- | --- |
 | Session not ready | Session conditions, target container, directory paths and pod init logs |
-| Sync target missing | Destination namespace/Deployment, enabled session and ready application pods |
+| Sync target missing | Session namespace/name, enabled session and ready application pods |
 | TLS error | Gateway hostname and CA; supply `--ca-file` for a private CA |
 | Transfer rejected | Ingress upload limits, gateway logs and network access |
 | ACK but unchanged app | Runtime reload command and application HTTP response |
-| Stale local job | `shadok status`; stop the group with `shadok unwatch` and publish again |
+| Stale local job | `shadok status`; stop the job with `shadok unwatch` and publish again |
 
 For framework setup use `shadok learn spring`; for gateway setup use `shadok learn network`.

@@ -18,6 +18,7 @@ import (
 	"shadok.org/operator/internal/buildinfo"
 	"shadok.org/operator/internal/daemon"
 	"shadok.org/operator/internal/guidance"
+	"shadok.org/operator/internal/provision"
 	"shadok.org/operator/internal/syncer"
 	"strings"
 	"syscall"
@@ -93,13 +94,22 @@ func run(args []string) error {
 	}
 	// Reject unknown commands before starting a daemon or reading project files.
 	switch args[0] {
-	case "watch", "publish", "build", "status", "unwatch", "daemon", "receive", "seed", "install":
+	case "watch", "publish", "build", "status", "unwatch", "daemon", "receive", "seed", "install", "prepare-files":
 	default:
 		return fmt.Errorf("unknown command %q; run shadok --help", args[0])
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	switch args[0] {
+	case "prepare-files":
+		if len(args) != 2 {
+			return fmt.Errorf("prepare-files requires JSON files")
+		}
+		var files []provision.File
+		if err := json.Unmarshal([]byte(args[1]), &files); err != nil {
+			return err
+		}
+		return provision.Prepare(ctx, files)
 	case "daemon":
 		if len(args) > 1 && args[1] == "serve" {
 			return daemon.Serve(ctx, daemon.StateDir())
@@ -218,10 +228,11 @@ func run(args []string) error {
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	config := fs.String("config", "shadok.yaml", "project configuration")
 	group := fs.String("group", "", "logical group")
+	sessionName := fs.String("session", "", "DevelopmentSession name or namespace/name")
 	destination := fs.String("destination", os.Getenv("SHADOK_DESTINATION"), "personal destination name")
 	namespace := fs.String("namespace", "", "namespace")
 	deployment := fs.String("deployment", "", "existing Deployment")
-	syncURL := fs.String("url", "", "sync gateway origin, e.g. https://sync.example.com")
+	syncURL := fs.String("url", os.Getenv("SHADOK_URL"), "sync gateway origin, e.g. https://sync.example.com")
 	caFile := fs.String("ca-file", "", "additional trusted PEM CA certificate")
 	url := fs.String("receiver-url", "", "local-test receiver URL")
 	tokenFile := fs.String("token-file", "", "local-test token path")
@@ -244,10 +255,9 @@ func run(args []string) error {
 		fmt.Println(string(b))
 		return nil
 	}
-	abs, g, err := daemon.Load(*config, *group)
-	if err != nil {
-		return err
-	}
+	var abs string
+	var g daemon.Group
+	var err error
 	d := daemon.Destination{Namespace: *namespace, CAFile: *caFile, URL: *url, Deployment: *deployment, TokenFile: *tokenFile}
 	if *destination != "" {
 		d, err = daemon.LoadDestination(*destination)
@@ -278,6 +288,43 @@ func run(args []string) error {
 	}
 	if d.TokenFile != "" {
 		d.TokenFile, err = filepath.Abs(d.TokenFile)
+		if err != nil {
+			return err
+		}
+	}
+	if *sessionName != "" {
+		if *group != "" || *deployment != "" || *config != "shadok.yaml" {
+			return fmt.Errorf("--session replaces --config, --group and --deployment")
+		}
+		d.Session = *sessionName
+		if parts := strings.Split(*sessionName, "/"); len(parts) == 2 {
+			if d.Namespace != "" && d.Namespace != parts[0] {
+				return fmt.Errorf("conflicting session namespace")
+			}
+			d.Namespace = parts[0]
+			d.Session = parts[1]
+		} else if len(parts) != 1 {
+			return fmt.Errorf("session must be name or namespace/name")
+		}
+		if d.Namespace == "" || d.Session == "" {
+			return fmt.Errorf("session namespace and name required")
+		}
+		d.Deployment = ""
+		abs, err = os.Getwd()
+		if err != nil {
+			return err
+		}
+		if args[0] != "unwatch" {
+			g, err = daemon.LoadSession(ctx, d, abs)
+			if err != nil {
+				return err
+			}
+			if args[0] == "watch" {
+				g.Mode = "watch"
+			}
+		}
+	} else {
+		abs, g, err = daemon.Load(*config, *group)
 		if err != nil {
 			return err
 		}
@@ -313,12 +360,22 @@ func run(args []string) error {
 		if err = cmd.Run(); err != nil {
 			return fmt.Errorf("build failed; no revision published: %w", err)
 		}
+		if d.Session != "" {
+			if err := daemon.ValidateSessionRoots(abs, g.Roots); err != nil {
+				return err
+			}
+		}
 		job.Snapshot, err = syncer.Capture(g.Roots, daemon.StateDir())
 		unix.Flock(int(lock.Fd()), unix.LOCK_UN)
 		if err != nil {
 			return err
 		}
 	} else {
+		if d.Session != "" {
+			if err := daemon.ValidateSessionRoots(abs, g.Roots); err != nil {
+				return err
+			}
+		}
 		job.Snapshot, err = syncer.Capture(g.Roots, daemon.StateDir())
 		if err != nil {
 			return err
@@ -374,12 +431,55 @@ func ipc(ctx context.Context, method, path string, input, output any) error {
 	return nil
 }
 func ensure(ctx context.Context) error {
-	if ipc(ctx, "GET", "/health", nil, nil) == nil {
-		return nil
-	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 	dir := daemon.StateDir()
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
+	}
+	lock, err := os.OpenFile(filepath.Join(dir, "daemon-start.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	for {
+		if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err == nil {
+			break
+		}
+		if err != unix.EWOULDBLOCK && err != unix.EAGAIN {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	defer unix.Flock(int(lock.Fd()), unix.LOCK_UN)
+	if ipc(ctx, "GET", "/health", nil, nil) == nil {
+		version, err := daemonProtocol(ctx)
+		if err != nil {
+			return err
+		}
+		if version == daemon.ProtocolVersion {
+			return nil
+		}
+		if version > daemon.ProtocolVersion {
+			return fmt.Errorf("daemon protocol %d is newer than this CLI; update the CLI", version)
+		}
+		if err := ipc(ctx, "POST", "/stop", nil, nil); err != nil {
+			return err
+		}
+		for ipc(ctx, "GET", "/health", nil, nil) == nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -399,10 +499,42 @@ func ensure(ctx context.Context) error {
 	}
 	cmd.Process.Release()
 	for i := 0; i < 50; i++ {
-		if ipc(ctx, "GET", "/health", nil, nil) == nil {
+		if version, err := daemonProtocol(ctx); err == nil && version == daemon.ProtocolVersion {
 			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	return fmt.Errorf("daemon did not start; inspect %s", filepath.Join(dir, "daemon.log"))
+}
+
+// The released v1 daemon has no protocol endpoint. Its persisted jobs remain compatible.
+func daemonProtocol(ctx context.Context) (int, error) {
+	r, err := http.NewRequestWithContext(ctx, "GET", "http://daemon/protocol", nil)
+	if err != nil {
+		return 0, err
+	}
+	res, err := client().Do(r)
+	if err != nil {
+		return 0, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode == http.StatusNotFound {
+		return 1, nil
+	}
+	if res.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("daemon protocol request: HTTP %d", res.StatusCode)
+	}
+	var protocol struct {
+		Version int `json:"version"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&protocol); err != nil {
+		return 0, err
+	}
+	if protocol.Version < 1 {
+		return 0, fmt.Errorf("invalid daemon protocol")
+	}
+	return protocol.Version, nil
 }

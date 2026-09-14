@@ -36,11 +36,12 @@ helm test shadok -n shadok-system --logs
 | `gateway.autoscaling` | autoscaling/v2 CPU/memory utilization targets, min/max replicas and behavior. Requires metrics-server and corresponding resource requests. |
 | `service.*` | ClusterIP, NodePort or LoadBalancer, ports, IP/class, source ranges and traffic policies. |
 | `gateway.tlsSecretName` | Existing TLS secret for native gateway TLS. Otherwise gateway serves HTTP for ingress termination. |
-| `ingress.*` | Class, annotations, labels, simple host/TLS secret or multiple `hosts[].paths[]` and `tls[]`. Paths must preserve `/namespace/deployment/...`; do not strip them. |
+| `ingress.*` | Class, annotations, labels, simple host/TLS secret or multiple `hosts[].paths[]` and `tls[]`. Paths must preserve `/sessions/namespace/session-name` and its `/plan` and `/apply` suffixes; do not strip them. Legacy routes `/namespace/deployment/...` remain available. |
 | `metrics.*` | Optional controller metrics service and Prometheus ServiceMonitor (requires its CRD). |
 | `networkPolicy.*` | Optional controller/gateway ingress and egress policies. Explicit API server/service CIDRs required. Gateway egress permits receivers on 7777 in the watched namespaces. |
 | `tests.*` | Helm connection test pod; configurable test image. Tests TCP reachability, not full synchronization. |
 | `uninstallGuard.*` | Pre-delete Job rejects uninstall while sessions are enabled or still restoring; reads through the operator account. |
+| `session.directories[].localPath`, `exclude` | Local project output and optional exclusions returned to `shadok publish/build/watch --session namespace/name`; no local sync file required. |
 | `session.*` | Optional DevelopmentSession with namespace, labels/annotations, target, directories, command, UID/GID and live image override. |
 
 Example settings for HA and a private registry:
@@ -107,3 +108,7 @@ session:
 ```
 
 Each step mounts the session's declared directories at their `mountPath`, uses the session UID/GID and runs after `shadok-seed`, before the original platform init containers and application. Failure prevents application startup; inspect that init container's logs. The application image remains unchanged. The complete Spring guide supplies the directory mappings and live command; this fragment only illustrates the chart field.
+
+### Session-owned tool volumes
+
+`session.volumes` renders `DevelopmentSession.spec.volumes`. Declare `name`, `mountPath`, `readOnly` and one source (`persistentVolumeClaim`, `configMap`, `secret`, or verified HTTPS `files`). The operator mounts these resources during live activation and removes the mounts on restoration. No application Deployment patch is required. File downloads run in a generated initialization container before custom init steps and application startup.

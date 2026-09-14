@@ -39,33 +39,19 @@ identity='system:serviceaccount:'+NS+':developer'
 for verb,resource in [('get','secrets'),('get','pods'),('patch','deployments'),('create','pods/portforward')]:
     result=subprocess.run(K+['-n',NS,'auth','can-i',verb,resource,'--as',identity],text=True,capture_output=True)
     assert result.stdout.strip()=='no',(verb,resource,result.stdout)
-def toggle(enabled):return kub('-n',NS,'patch','developmentsession',name,'--type=merge','-p',json.dumps({'spec':{'enabled':enabled}}),'--as',identity)
-stack=args.stack;name=stack;port={'baseline':8080,'node':3000,'python':8000,'spring':8080,'ts':8080,'vite':8080}[stack]
+def toggle(enabled):return kub('-n',NS,'patch','developmentsession',session_name,'--type=merge','-p',json.dumps({'spec':{'enabled':enabled}}),'--as',identity)
+stack=args.stack;name=stack;session_name=name+'-live' if stack=='spring' else name;port={'baseline':8080,'node':3000,'python':8000,'spring':8080,'ts':8080,'vite':8080}[stack]
 mount='classes' if stack=='spring' else 'application'
 image_path={'baseline':'/app','node':'/app/src','python':'/app/src','spring':'/tmp','ts':'/app/dist','vite':'/app/src'}[stack]
 commands={'baseline':['python','-m','http.server','8080','--directory','/app'],'node':['./node_modules/.bin/nodemon','--legacy-watch','src/app.js'],'python':['python','-m','uvicorn','main:app','--host','0.0.0.0','--port','8000','--reload','--reload-dir','/app/src'],'spring':['java','-cp','/live/classes:/live/packaged/unpacked/BOOT-INF/lib/*:/app/lib/*:/opt/devtools/*','example.Application'],'ts':['node','--watch','dist/server.js'],'vite':['./node_modules/.bin/vite','--host','0.0.0.0','--port','8080']}
 # A platform-owned Deployment exists before the Shadok release; no generated dev Deployment.
 d={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':name,'namespace':NS},'spec':{'replicas':2 if stack=='baseline' else 1,'selector':{'matchLabels':{'app':name}},'template':{'metadata':{'labels':{'app':name},'annotations':{'platform.example/retained':'yes'}},'spec':{'containers':[{'name':'app','image':f'shadok-{stack}:local','imagePullPolicy':'IfNotPresent','env':[{'name':'PLATFORM_VALUE','value':'preserved'}],'resources':{'requests':{'cpu':'10m','memory':'32Mi'},'limits':{'memory':'512Mi' if stack=='spring' else '256Mi'}}}]}}}}
 try:
-    get('developmentsession',name)
+    get('developmentsession',session_name)
 except subprocess.CalledProcessError:pass
 else:
     toggle(False)
     wait(lambda:not get('deployment',name)['spec']['template']['metadata'].get('annotations',{}).get('shadok.org/live-session'),'cleanup previous live test')
-if stack=='spring':
-    jars=list((ROOT/'pods/spring-hello/target/lib').glob('spring-boot-devtools-*.jar'))
-    assert len(jars)==1,'run mvn verify first to resolve the matching DevTools JAR'
-    kub('-n',NS,'delete','pod','spring-devtools-loader','--ignore-not-found','--wait=true')
-    kub('-n',NS,'apply','-f',str(ROOT/'pods/spring-hello/kubernetes/devtools-volume.yaml'))
-    kub('-n',NS,'wait','--for=condition=Ready','pod/spring-devtools-loader','--timeout=120s')
-    kub('-n',NS,'exec','spring-devtools-loader','-c','loader','--','sh','-c','if [ -f /devtools/spring-boot-devtools.jar ]; then chmod u+w /devtools/spring-boot-devtools.jar; fi')
-    kub('-n',NS,'cp',str(jars[0]),'spring-devtools-loader:/devtools/spring-boot-devtools.jar','-c','loader')
-    kub('-n',NS,'exec','spring-devtools-loader','-c','loader','--','chmod','0444','/devtools/spring-boot-devtools.jar')
-    kub('-n',NS,'delete','pod','spring-devtools-loader','--wait=true')
-    ps=d['spec']['template']['spec']
-    ps['securityContext']={'fsGroup':1000}
-    ps['volumes']=[{'name':'devtools','persistentVolumeClaim':{'claimName':'spring-devtools','readOnly':True}}]
-    ps['containers'][0]['volumeMounts']=[{'name':'devtools','mountPath':'/opt/devtools','readOnly':True}]
 d['spec']['template']['spec']['containers'][0]['readinessProbe']={'httpGet':{'path':'/' if stack in ('baseline','vite') else '/hello','port':port},'initialDelaySeconds':3,'periodSeconds':1}
 apply(d);apply({'apiVersion':'v1','kind':'Service','metadata':{'name':name,'namespace':NS},'spec':{'selector':{'app':name},'ports':[{'port':port,'targetPort':port}]}})
 if stack=='spring':kub('-n',NS,'rollout','restart','deployment/'+name)
@@ -83,15 +69,15 @@ if stack=='spring':
     assert cmdline.split('\x00')[:3]==['java','-jar','/app/application.jar'],'baseline is not java -jar'
     assert 'restartedMain' not in baseline_logs,'baseline loaded DevTools'
     baseline_image_id=next(c['imageID'] for c in baseline_pod['status']['containerStatuses'] if c['name']=='app')
-    kub('-n',NS,'exec',baseline_pod['metadata']['name'],'-c','app','--','test','-r','/opt/devtools/spring-boot-devtools.jar')
-    print('PASS Spring production baseline: java -jar, layered application JAR and lib directory, no packaged DevTools; external JAR not loaded',flush=True)
+    assert not any(m['mountPath']=='/opt/devtools' for m in baseline_pod['spec']['containers'][0].get('volumeMounts',[])), 'production must not have a preinstalled tools mount'
+    print('PASS Spring production baseline: java -jar, layered application JAR and lib directory, no packaged DevTools and no tools mount',flush=True)
 with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
     base=pathlib.Path(td);src=base/'src';src.mkdir();forwards=[]
     # Self-signed TLS is scoped to this isolated test; the client validates it explicitly.
     cert=base/'ca.crt';key=base/'tls.key'
     subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(key),'-out',str(cert),'-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     secret=json.loads(kub('-n',SYSTEM,'create','secret','tls','gateway-tls','--cert',str(cert),'--key',str(key),'--dry-run=client','-o','json'));apply(secret)
-    values={'operator':{'image':{'tag':'local'},'toolImage':{'tag':'local'}},'gateway':{'image':{'tag':'local'},'tlsSecretName':'gateway-tls'},'session':{'create':True,'namespace':NS,'name':name,'enabled':False,'deployment':name,'container':'app','runAsUser':1000,'runAsGroup':1000,'directories':[{'name':mount,'imagePath':image_path,'mountPath':'/live/classes' if stack=='spring' else image_path}],'start':{'command':commands[stack][:1],'args':commands[stack][1:],'workingDir':'/app'}}}
+    values={'operator':{'image':{'tag':'local'},'toolImage':{'tag':'local'}},'gateway':{'image':{'tag':'local'},'tlsSecretName':'gateway-tls'},'session':{'create':True,'namespace':NS,'name':session_name,'enabled':False,'deployment':name,'container':'app','runAsUser':1000,'runAsGroup':1000,'directories':[{'name':mount,'imagePath':image_path,'mountPath':'/live/classes' if stack=='spring' else image_path}],'start':{'command':commands[stack][:1],'args':commands[stack][1:],'workingDir':'/app'}}}
     if RELEASE:
         values['operator']={}
         values['gateway'].pop('image')
@@ -101,6 +87,7 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
         values['session']['image']=''
         values['session']['directories']=spring_spec['directories']
         values['session']['init']=spring_spec['init']
+        values['session']['volumes']=spring_spec['volumes']
     # One infrastructure release, then instance-only releases for additional targets.
     if stack!='baseline':values['operator']={'enabled':False}
     vf=base/'values.json';vf.write_text(json.dumps(values));release='runtime' if stack=='baseline' else stack
@@ -148,21 +135,26 @@ with tempfile.TemporaryDirectory(prefix=f'shadok-live-{stack}-') as td:
         assert any(m['mountPath']=='/opt/devtools' and m.get('readOnly') for m in mounts),'DevTools not read-only'
         init_status=next(c for c in live_pod['status']['initContainerStatuses'] if c['name']=='shadok-init-unpack')
         assert init_status['state']['terminated']['exitCode']==0,'JDK initialization did not complete'
-        print('PASS Spring live activation: same production image digest, JAR extracted inside Pod by standard JDK init, only DevTools from read-only PVC',flush=True)
+        print('PASS Spring live activation: same production image digest, JAR extracted inside Pod by standard JDK init, DevTools automatically downloaded and verified into a read-only app mount',flush=True)
     if stack!='baseline':
         demo=ROOT/f'pods/{stack}-hello'
         if stack in ('spring','ts'):
-            work=base/'project';shutil.copytree(demo,work,ignore=shutil.ignore_patterns('node_modules','target','dist'))
+            work=base/'project';shutil.copytree(demo,work,ignore=shutil.ignore_patterns('node_modules','target','dist','shadok.yaml'))
             if stack=='ts':os.symlink(demo/'node_modules',work/'node_modules')
             src=work/('target/classes' if stack=='spring' else 'dist');subprocess.run(['mvn','-q','compile'] if stack=='spring' else ['npm','run','build'],cwd=work,check=True)
         else:shutil.copytree(demo/'src',src,dirs_exist_ok=True)
     else:(src/'index.html').write_text('synchronized-v1\n')
-    config=base/'config.json';config.write_text(json.dumps({'version':1,'groups':{'live':{'mode':'build' if RELEASE or stack in ('spring','ts') else 'watch','roots':[{'mount':mount,'path':str(src),'exclude':['**/__pycache__/**','**/*.pyc']}]}}}))
+    config=base/'config.json'
+    if stack!='spring':config.write_text(json.dumps({'version':1,'groups':{'live':{'mode':'build' if RELEASE or stack in ('spring','ts') else 'watch','roots':[{'mount':mount,'path':str(src),'exclude':['**/__pycache__/**','**/*.pyc']}]}}}))
     # Daemon cannot obtain Kubernetes credentials from its environment.
     env=dict(os.environ,SHADOK_STATE_DIR=str(base/'daemon'),KUBECONFIG=str(base/'does-not-exist'))
     common=['--config',str(config),'--group','live','--url',gateway,'--namespace',NS,'--deployment',name,'--ca-file',str(cert),'--timeout','90s']
+    if stack=='spring':
+        common=['--session',NS+'/'+session_name,'--url',gateway,'--ca-file',str(cert),'--timeout','90s']
+        assert not (work/'shadok.yaml').exists() and not config.exists(),'session sync must not need local configuration'
+        print('PASS session-name sync: spring-live targets Deployment spring, no local sync configuration, no Kubernetes credentials',flush=True)
     def cli(*a,ok=True):
-        result=subprocess.run([str(BIN),*a],env=env,text=True,capture_output=True,timeout=110)
+        result=subprocess.run([str(BIN),*a],env=env,cwd=work if stack=='spring' else None,text=True,capture_output=True,timeout=110)
         if ok and result.returncode:
             status=subprocess.run([str(BIN),'status',*common],env=env,text=True,capture_output=True,timeout=10)
             raise AssertionError(result.stdout+result.stderr+'\nDaemon status: '+status.stdout+status.stderr)

@@ -7,8 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	api "shadok.org/operator/api/v1alpha1"
 	"shadok.org/operator/internal/buildinfo"
-	"shadok.org/operator/internal/daemon"
+	"shadok.org/operator/internal/session"
 	"sigs.k8s.io/yaml"
 )
 
@@ -145,29 +148,34 @@ func TestDocumentsAndConfigurationExamples(t *testing.T) {
 	if _, err := Document("../../secrets"); err == nil {
 		t.Fatal("accepted unknown topic")
 	}
-	// Parse portable group examples through the real runtime config loader.
+	// Verify self-contained resource examples against the real session planner.
 	for _, topic := range []string{"configure", "spring", "quarkus", "node", "python"} {
 		b, _ := Document(topic)
 		chunks := strings.Split(string(b), "```yaml\n")
 		found := 0
 		for _, chunk := range chunks[1:] {
 			snippet := strings.SplitN(chunk, "```", 2)[0]
-			if !strings.Contains(snippet, "groups:") {
+			if !strings.Contains(snippet, "kind: DevelopmentSession") {
 				continue
 			}
-			var cfg daemon.Config
-			if err := yaml.UnmarshalStrict([]byte(snippet), &cfg); err != nil {
+			var resource api.DevelopmentSession
+			if err := yaml.UnmarshalStrict([]byte(snippet), &resource); err != nil {
 				t.Fatal(err)
 			}
-			file := filepath.Join(physicalTemp(t), "shadok.yaml")
-			if err := os.WriteFile(file, []byte(snippet), 0644); err != nil {
-				t.Fatal(err)
+			deployment := &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: resource.Spec.Container, Image: "production"}}}}}}
+			if _, err := session.Plan(&resource, deployment, "tools"); err != nil {
+				t.Fatalf("%s session: %v", topic, err)
 			}
-			for group := range cfg.Groups {
-				if _, _, err := daemon.Load(file, group); err != nil {
-					t.Fatalf("%s example: %v", topic, err)
+			mapped := false
+			for _, d := range resource.Spec.Directories {
+				if d.LocalPath != "" {
+					mapped = true
 				}
 			}
+			if !mapped {
+				t.Fatalf("%s does not declare outputs", topic)
+			}
+
 			found++
 		}
 		if found == 0 {

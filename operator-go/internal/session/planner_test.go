@@ -6,8 +6,60 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reflect"
 	api "shadok.org/operator/api/v1alpha1"
+	"strings"
 	"testing"
 )
+
+func TestSessionOwnsToolMountAndPreparation(t *testing.T) {
+	_, s, d := fixture(t)
+	s.Spec.Volumes = []api.SessionVolume{{Name: "devtools", MountPath: "/opt/devtools", ReadOnly: true, Files: []api.ToolFile{{Path: "devtools.jar", URL: "https://repo.example/devtools.jar", SHA256: strings.Repeat("a", 64)}}}}
+	p, err := Plan(s, d, "tools")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Spec.Template.Spec.Volumes) != 0 {
+		t.Fatal("baseline mutated")
+	}
+	prepare := p.Spec.InitContainers[2]
+	if prepare.Name != "shadok-prepare-files" || len(prepare.VolumeMounts) != 1 || prepare.VolumeMounts[0].ReadOnly {
+		t.Fatal("tools not prepared before startup")
+	}
+	mounts := p.Spec.Containers[0].VolumeMounts
+	if !mounts[len(mounts)-1].ReadOnly {
+		t.Fatal("application tool mount must be read-only")
+	}
+	for _, m := range p.Spec.Containers[1].VolumeMounts {
+		if strings.HasPrefix(m.Name, "shadok-extra-") {
+			t.Fatal("tool volume exposed to sync receiver")
+		}
+	}
+	s.Spec.Volumes[0].MountPath = "/app/tools"
+	if _, err := Plan(s, d, "tools"); err == nil {
+		t.Fatal("overlapping mount accepted")
+	}
+	s.Spec.Volumes[0].MountPath = "/opt/devtools"
+	s.Spec.Volumes[0].PersistentVolumeClaim = &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "tools"}
+	if _, err := Plan(s, d, "tools"); err == nil {
+		t.Fatal("multiple volume sources accepted")
+	}
+}
+
+func TestEmptyWorkingDirectoryNeedsNoImageSeed(t *testing.T) {
+	_, s, d := fixture(t)
+	s.Spec.Directories[0].ImagePath = ""
+	p, err := Plan(s, d, "tools")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range p.Spec.InitContainers {
+		if c.Name == "shadok-seed" {
+			t.Fatal("empty directory must not copy image contents")
+		}
+	}
+	if len(p.Spec.Containers[0].VolumeMounts) != 1 {
+		t.Fatal("working directory not mounted")
+	}
+}
 
 func TestPlanPreservesAndSeeds(t *testing.T) {
 	d := &appsv1.Deployment{Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "production"}, Annotations: map[string]string{"platform.example/setting": "preserved"}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "sidecar", Image: "original"}, {Name: "app", Image: "baseline", Env: []corev1.EnvVar{{Name: "CONFIG", Value: "preserve"}}, VolumeMounts: []corev1.VolumeMount{{Name: "secret", MountPath: "/secret"}}}}, Volumes: []corev1.Volume{{Name: "secret", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret"}}}}}}}}

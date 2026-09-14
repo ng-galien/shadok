@@ -102,6 +102,31 @@ class ReleaseTests(unittest.TestCase):
             self.assertFalse(manifest['pushed'])
             self.assertEqual(len((root / 'SHA256SUMS-images-1.2.3').read_text().splitlines()), 7)
 
+    def test_image_cache_reuse_and_failed_export_preserves_previous_cache(self):
+        spec = importlib.util.spec_from_file_location('shadok_images', SCRIPTS / 'images.py')
+        images = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(images)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            cache = root / 'cache'
+            calls = []
+            def run(command, **kwargs):
+                calls.append(command)
+                pathlib.Path(command[command.index('--metadata-file') + 1]).write_text('{}')
+                destination = pathlib.Path(command[command.index('--cache-to') + 1].split('dest=')[1].split(',')[0])
+                destination.mkdir(parents=True, exist_ok=True)
+                (destination / 'index.json').write_text('valid-cache')
+            argv = ['images.py', '--version', '1.2.3', '--image-prefix', 'registry.example/team',
+                    '--builder', 'review', '--output', str(root / 'out'), '--push', '--cache-dir', str(cache)]
+            with patch.object(sys, 'argv', argv), patch.object(images.subprocess, 'run', side_effect=run):
+                images.main()
+            self.assertNotIn('--cache-from', calls[0])
+            self.assertTrue(all('--cache-from' in command for command in calls[1:]))
+            with patch.object(sys, 'argv', argv), patch.object(images.subprocess, 'run', side_effect=RuntimeError('export failed')):
+                with self.assertRaises(RuntimeError):
+                    images.main()
+            self.assertEqual((cache / 'shared/index.json').read_text(), 'valid-cache')
+
 
 if __name__ == '__main__':
     unittest.main()

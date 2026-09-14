@@ -15,11 +15,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: operator-go/go.mod
-          cache-dependency-path: operator-go/go.sum
+          cache: false
+      - name: Restore Go module and compilation caches
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('operator-go/go.mod', 'operator-go/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ hashFiles('operator-go/go.mod', 'operator-go/go.sum') }}-
+            go-${{ runner.os }}-
       - name: Validate workflow syntax
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/*.yml
       - name: Install checksum-verified Helm
@@ -40,7 +50,7 @@ jobs:
           cmp /tmp/deepcopy-before.go operator-go/api/v1alpha1/zz_generated.deepcopy.go
           helm lint operator-go/chart --strict
       - name: Local daemon integration
-        run: make -C operator-go local-e2e
+        run: python3 operator-go/test/e2e/local_daemon.py
       - name: Prepare unpublished release bundle
         run: python3 operator-go/scripts/package.py --version 1.0.0-ci --image-prefix example.invalid/shadok --output dist
       - name: Verify packaged CLI and checksums
@@ -61,7 +71,7 @@ jobs:
           smoke/shadok agent status --path "$RUNNER_TEMP/shadok-skill"
           smoke/shadok agent uninstall --path "$RUNNER_TEMP/shadok-skill"
       - name: Retain unpublished review artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: shadok-review-${{ github.sha }}
           path: dist/
@@ -71,7 +81,9 @@ jobs:
         run: |
           go install sigs.k8s.io/kind@v0.32.0
           ./scripts/cluster-up.sh
-          make -C operator-go generic-images
+          for component in operator gateway tools; do
+            docker build -f operator-go/Dockerfile.ci --target "$component" -t "shadok-${component}:local" operator-go
+          done
           for component in operator gateway tools; do
             kind load docker-image --name shadok-go-e2e "shadok-${component}:local"
           done
@@ -89,7 +101,7 @@ jobs:
           kind export logs /tmp/kind-logs --name shadok-go-e2e || true
       - name: Retain Kubernetes diagnostics
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kind-diagnostics-${{ github.sha }}
           path: /tmp/kind-logs

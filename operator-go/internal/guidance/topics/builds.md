@@ -1,12 +1,23 @@
 # Build and synchronization command reference
 
+Run commands from the project directory and set these values once:
+
+```sh
+export SHADOK_URL=https://YOUR_SYNC_GATEWAY
+export NAMESPACE=YOUR_APPLICATION_NAMESPACE
+export SESSION=YOUR_DEVELOPMENTSESSION_NAME
+export SYNC_CA="" # Set an absolute PEM CA path only for a private gateway CA.
+```
+
+Keep this directory and these values for all commands below. The DevelopmentSession declares outputs in `directories[].localPath` and optional `exclude`; no local configuration file is required.
+
 The complete runtime guides (`spring`, `quarkus`, `node`, `python`) provide their own configuration and commands. Use this reference to integrate an already working command into your build tool or CI.
 
 ## 1. Run a build and publish only its successful output
 
 ```sh
-shadok build --config shadok.yaml --group service \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT" \
+shadok build --session "$NAMESPACE/$SESSION" \
+  --ca-file "$SYNC_CA" \
   -- YOUR_BUILD_COMMAND YOUR_BUILD_ARGUMENTS
 ```
 
@@ -17,8 +28,8 @@ Use the build command established by the runtime guide; an arbitrary `mvn verify
 ## 2. Publish from an existing successful-build hook
 
 ```sh
-shadok publish --config shadok.yaml --group service \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
+shadok publish --session "$NAMESPACE/$SESSION" \
+  --ca-file "$SYNC_CA"
 ```
 
 Run only after the build and any required staging step succeed. The hook must prevent concurrent writes to its output directories while they are captured. Do not combine the hook with `shadok build` around the same build: that would publish twice.
@@ -26,15 +37,15 @@ Run only after the build and any required staging step succeed. The hook must pr
 ## 3. Watch directly executable source files
 
 ```sh
-shadok watch --config shadok.yaml --group source \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
+shadok watch --session "$NAMESPACE/$SESSION" \
+  --ca-file "$SYNC_CA"
 ```
 
-The group must use `mode: watch`. The application must already run the appropriate reload server. Do not watch compiler output while compilation is writing a partially updated set; use a successful-build boundary.
+The application must already run the appropriate reload server. Do not watch compiler output while compilation is writing a partially updated set; use a successful-build boundary.
 
 ## 4. CI environment
 
-Install the CLI on PATH. Supply the gateway origin, application namespace/Deployment and optional `--ca-file` for private TLS. The daemon does not need Kubernetes credentials. Keep builds for one output directory serialized.
+Install the CLI on PATH. Supply the gateway origin, session namespace/name and `SYNC_CA` for private TLS (empty for a public CA). The daemon does not need Kubernetes credentials. Keep builds for one output directory serialized.
 
 A persistent daemon retains the latest snapshot and can resend after pod replacement. An ephemeral CI job must publish again when its daemon/state have gone away. File delivery does not prove application reload: make an HTTP assertion against the application URL.
 
@@ -42,8 +53,8 @@ A persistent daemon retains the latest snapshot and can resend after pod replace
 
 ```sh
 shadok status
-shadok unwatch --config shadok.yaml --group service \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
+shadok unwatch --session "$NAMESPACE/$SESSION" \
+  --ca-file "$SYNC_CA"
 ```
 
-`unwatch` removes this synchronization job; it does not disable the DevelopmentSession. Restore production using the runtime guide's final chapter. `shadok daemon stop` stops all jobs of the local daemon, so use it only when that is intended.
+Run `unwatch` from the same project directory with the same gateway and CA values used for publication/watch. It removes this synchronization job; it does not disable the DevelopmentSession. Restore production using the runtime guide's final chapter. `shadok daemon stop` stops all jobs of the local daemon, so use it only when that is intended.

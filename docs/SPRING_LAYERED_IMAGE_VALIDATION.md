@@ -13,7 +13,8 @@ The test checks:
 | Operation | Expected result |
 | --- | --- |
 | Start production | Layered application JAR, no DevTools loaded |
-| Activate live mode | Same image digest; JDK init extracts the production JAR inside the pod; external volume contains only DevTools |
+| Activate live mode | Same image digest; JDK init extracts the production JAR inside the pod; operator downloads/checks DevTools and mounts its per-pod volume; no prior Deployment patch |
+| Publish by session name | `--session shadok-live-e2e/spring-live` resolves Deployment `spring`; local output comes from the session; no local sync configuration file or Kubernetes credentials |
 | Change `/hello` | Updated response after build/sync |
 | Add a controller method | Endpoint changes from 404 to 200 |
 | Add a controller | New endpoint returns 200 |
@@ -24,4 +25,4 @@ The test checks:
 
 Check HTTP results, not only transfer acknowledgements. DevTools may briefly interrupt requests. Activation and restoration roll out pods; reloads during the session do not.
 
-The Spring Boot 4.1.1 layered-image run passed with the JDK initialization step. The external volume contained only `spring-boot-devtools.jar`; the production application was extracted inside the pod. HTTP additions/deletion, unchanged container identity, replacement recovery and exact Deployment restoration all passed.
+Spring Boot 4.1.1 passed with automatic DevTools preparation and the JDK initialization step. The baseline had no DevTools mount. The operator created the tool volume, verified the downloaded JAR and mounted it read-only. HTTP additions/deletion, unchanged container identity, replacement recovery and exact restoration without the tool mount all passed.

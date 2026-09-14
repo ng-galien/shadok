@@ -10,10 +10,11 @@ export NAMESPACE=YOUR_APPLICATION_NAMESPACE
 export DEPLOYMENT=YOUR_EXISTING_DEPLOYMENT
 export IMAGE=YOUR_IMMUTABLE_PRODUCTION_IMAGE
 export SYNC_URL=https://YOUR_SYNC_GATEWAY
+export SYNC_CA="" # Set an absolute PEM CA path only for a private gateway CA.
 export APP_URL=https://YOUR_APPLICATION_HOST
 ```
 
-Create `live/session.yaml` and `shadok.yaml` using this guide. No Shadok npm package or script is assumed.
+Create `live/session.yaml` using this guide. No Shadok npm package or script is assumed.
 
 ## 2. Inspect the application and choose what to synchronize
 
@@ -69,6 +70,7 @@ spec:
     - name: application
       imagePath: /app/dist
       mountPath: /app/dist
+      localPath: dist
   start:
     command: [node]
     args: [--watch, dist/server.js]
@@ -81,49 +83,25 @@ For source JS, replace both directory paths with the actual source path, and the
 
 ## 4. Write the local mapping and build command
 
-For compiled output, create `shadok.yaml`:
-
-```yaml
-version: 1
-project: YOUR_PROJECT
-groups:
-  service:
-    mode: build
-    roots:
-      - mount: application
-        path: dist
-```
-
-Use the real output directory relative to this file. Confirm the project's build removes stale output after source deletion; TypeScript compilation alone may leave old emitted files. Use the project's clean/build command when necessary.
+Set `localPath: dist` on the session's application directory for compiled output, or `localPath: src` for executable source. Use the project's actual output directory relative to the CLI working directory. Shadok reads it from the session. Ensure the build removes obsolete output files after source deletion.
 
 After activation in chapter 5:
 
 ```sh
-shadok build --config shadok.yaml --group service \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT" \
+shadok build --session "$NAMESPACE/node-live" \
+  --url "$SYNC_URL" --ca-file "$SYNC_CA" \
   -- npm run build
 ```
 
-`npm run build` must already be defined by this project. Shadok executes it, then publishes only on success. Replace it with the actual pnpm/yarn/build command if appropriate. For a private gateway CA, add `--ca-file /path/to/company-ca.pem` before `--`.
+`npm run build` must already be defined by this project. Shadok executes it, then publishes only on success. Replace it with the actual pnpm/yarn/build command if appropriate. For a private gateway CA, set `SYNC_CA` to its absolute PEM file path; otherwise leave it empty.
 
-For source JS use this complete mapping instead:
-
-```yaml
-version: 1
-project: YOUR_PROJECT
-groups:
-  source:
-    mode: watch
-    roots:
-      - mount: application
-        path: src
-```
+For source JS, set the session directory's `localPath` to `src`.
 
 Start synchronization after activation:
 
 ```sh
-shadok watch --config shadok.yaml --group source \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
+shadok watch --session "$NAMESPACE/node-live" \
+  --url "$SYNC_URL" --ca-file "$SYNC_CA"
 ```
 
 Dependency/lockfile changes require corresponding runtime dependencies before activation. Do not copy macOS native `node_modules` into a Linux pod or assume syncing source installs packages.
@@ -151,11 +129,11 @@ The application child process can restart under Node's watcher while Pod/contain
 
 ## 6. Restore production
 
-Use `service` for build mode or `source` for watch mode:
+Run from the same project directory as publication/watch, with the same `SYNC_URL` and `SYNC_CA`. These values identify the local synchronization job.
 
 ```sh
-shadok unwatch --config shadok.yaml --group service \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
+shadok unwatch --session "$NAMESPACE/node-live" \
+  --url "$SYNC_URL" --ca-file "$SYNC_CA"
 kubectl --context "$CONTEXT" -n "$NAMESPACE" patch developmentsession node-live \
   --type merge -p '{"spec":{"enabled":false}}'
 kubectl --context "$CONTEXT" -n "$NAMESPACE" get developmentsession node-live -o yaml

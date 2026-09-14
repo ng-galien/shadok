@@ -4,6 +4,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
@@ -16,15 +17,45 @@ var AddToScheme = SchemeBuilder.AddToScheme
 type Directory struct {
 	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9-]*$`
 	// +kubebuilder:validation:MaxLength=51
-	Name      string `json:"name"`
-	ImagePath string `json:"imagePath"`
+	Name string `json:"name"`
+	// Omit to start with an empty working directory; otherwise copy from the application image.
+	ImagePath string `json:"imagePath,omitempty"`
 	MountPath string `json:"mountPath"`
+	// Build output/source directory relative to the CLI working directory. Omit for non-synchronized volumes.
+	LocalPath string   `json:"localPath,omitempty"`
+	Exclude   []string `json:"exclude,omitempty"`
 }
 type Start struct {
 	// +kubebuilder:validation:MinItems=1
 	Command    []string `json:"command"`
 	Args       []string `json:"args,omitempty"`
 	WorkingDir string   `json:"workingDir,omitempty"`
+}
+
+// ToolFile is downloaded and verified before the application starts.
+type ToolFile struct {
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][A-Za-z0-9._-]*$`
+	Path string `json:"path"`
+	// +kubebuilder:validation:Pattern=`^https://`
+	URL string `json:"url"`
+	// +kubebuilder:validation:Pattern=`^[a-f0-9]{64}$`
+	SHA256 string `json:"sha256"`
+}
+
+// SessionVolume exists only while live mode is enabled. Files use a per-pod emptyDir.
+// +kubebuilder:validation:XValidation:rule="(has(self.persistentVolumeClaim) ? 1 : 0) + (has(self.configMap) ? 1 : 0) + (has(self.secret) ? 1 : 0) + (has(self.files) && size(self.files) > 0 ? 1 : 0) == 1",message="choose exactly one volume source"
+type SessionVolume struct {
+	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9-]*$`
+	// +kubebuilder:validation:MaxLength=49
+	Name                  string                                    `json:"name"`
+	MountPath             string                                    `json:"mountPath"`
+	ReadOnly              bool                                      `json:"readOnly,omitempty"`
+	PersistentVolumeClaim *corev1.PersistentVolumeClaimVolumeSource `json:"persistentVolumeClaim,omitempty"`
+	ConfigMap             *corev1.ConfigMapVolumeSource             `json:"configMap,omitempty"`
+	Secret                *corev1.SecretVolumeSource                `json:"secret,omitempty"`
+	// +listType=map
+	// +listMapKey=path
+	Files []ToolFile `json:"files,omitempty"`
 }
 
 // InitStep runs after image directories are seeded and before the application starts.
@@ -67,6 +98,10 @@ type SessionSpec struct {
 	// Ordered initialization commands; no framework-specific behavior is inferred.
 	// +listType=atomic
 	Init []InitStep `json:"init,omitempty"`
+	// Additional application mounts, managed and removed by the operator.
+	// +listType=map
+	// +listMapKey=name
+	Volumes []SessionVolume `json:"volumes,omitempty"`
 	// A session-specific UID/GID for shared emptyDir writes. Must match the baseline runtime.
 	// +kubebuilder:validation:Minimum=1
 	RunAsUser int64 `json:"runAsUser"`

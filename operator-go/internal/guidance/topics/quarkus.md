@@ -11,9 +11,7 @@ Create these files in your application repository:
 | File | Purpose |
 | --- | --- |
 | `live/tools-volume.yaml` | Framework-only resource storage and temporary loader |
-| `live/deployment-tools.yaml` | Add the framework resource mount to the existing Deployment |
 | `live/session.yaml` | Target, live directory and startup command |
-| `shadok.yaml` | Local output mirror and protected runtime directories |
 | Gradle `stageShadok` task **or** Maven staging commands below | Place compiled application files at `dev/app/` in the local mirror |
 
 An agent restricted to DevelopmentSessions obtains image/layout information and matching framework resources from the platform. It supplies the volume/mount files to the platform; it does not need broader permissions to publish builds.
@@ -28,6 +26,7 @@ export NAMESPACE=YOUR_APPLICATION_NAMESPACE
 export DEPLOYMENT=YOUR_EXISTING_DEPLOYMENT
 export IMAGE=YOUR_IMMUTABLE_PRODUCTION_IMAGE
 export SYNC_URL=https://YOUR_SYNC_GATEWAY
+export SYNC_CA="" # Set an absolute PEM CA path only for a private gateway CA.
 export APP_URL=https://YOUR_APPLICATION_HOST
 kubectl --context "$CONTEXT" -n "$NAMESPACE" get deployment "$DEPLOYMENT" -o yaml
 docker pull "$IMAGE"
@@ -141,37 +140,7 @@ kubectl --context "$CONTEXT" -n "$NAMESPACE" cp \
 kubectl --context "$CONTEXT" -n "$NAMESPACE" delete pod quarkus-reload-tools-loader
 ```
 
-Create `live/deployment-tools.yaml` as a strategic merge patch, not a replacement Deployment:
-
-```yaml
-spec:
-  template:
-    spec:
-      securityContext:
-        fsGroup: 185
-      volumes:
-        - name: quarkus-reload-tools
-          persistentVolumeClaim:
-            claimName: quarkus-reload-tools
-            readOnly: true
-      containers:
-        - name: APPLICATION_CONTAINER
-          volumeMounts:
-            - name: quarkus-reload-tools
-              mountPath: /opt/quarkus-reload
-              readOnly: true
-```
-
-Merge the fragment through the existing chart. For a direct platform-managed installation:
-
-```sh
-kubectl --context "$CONTEXT" -n "$NAMESPACE" patch deployment "$DEPLOYMENT" \
-  --type strategic --patch-file live/deployment-tools.yaml
-kubectl --context "$CONTEXT" -n "$NAMESPACE" rollout status deployment/"$DEPLOYMENT"
-curl -i "$APP_URL/YOUR_EXISTING_ENDPOINT"
-```
-
-The production command is unchanged and does not load this resource volume.
+Declare the PVC in the DevelopmentSession below. The operator adds and removes its mount; do not patch the application Deployment.
 
 ## 5. Define the live session and local mirror
 
@@ -193,6 +162,15 @@ spec:
     - name: application
       imagePath: /deployments
       mountPath: /live/quarkus
+      localPath: build/shadok-sync
+      exclude: [lib, 'lib/**', app, 'app/**', quarkus, 'quarkus/**', '*.jar', quarkus-app-dependencies.txt]
+  volumes:
+    - name: quarkus-tools
+      mountPath: /opt/quarkus-reload
+      readOnly: true
+      persistentVolumeClaim:
+        claimName: quarkus-reload-tools
+        readOnly: true
   start:
     command: [sh]
     args:
@@ -207,27 +185,7 @@ spec:
 
 No `spec.image` override is set. Shadok seeds the complete directory from the existing production image. The startup command adds only the framework resources, retaining the original application JAR and runner. `QUARKUS_LAUNCH_DEVMODE` selects Quarkus remote server mode. `quarkus.profile=prod` retains the normal profile's configuration while enabling live coding; select your application's actual configuration profile and preserve its required JVM options. Quarkus's own bootstrap prepares `dev/app`.
 
-Create `shadok.yaml` for Gradle (for Maven change `path` to `target/shadok-sync`):
-
-```yaml
-version: 1
-project: YOUR_PROJECT
-groups:
-  service:
-    mode: build
-    roots:
-      - mount: application
-        path: build/shadok-sync
-        exclude:
-          - lib
-          - lib/**
-          - app
-          - app/**
-          - quarkus
-          - quarkus/**
-          - '*.jar'
-          - quarkus-app-dependencies.txt
-```
+The session uses `localPath: build/shadok-sync` for Gradle. For Maven use `localPath: target/shadok-sync`. These paths are relative to the CLI working directory; the gateway supplies the mapping and exclusions, so no local YAML or group is required.
 
 The mirror contains `dev/app/...` only. **Keep these exclusions**: they prevent synchronization from deleting bootstrap libraries, packaged application JARs and Quarkus metadata absent from the compiler output. Check additional files in your actual package and exclude runtime-owned paths too. Do not exclude `dev/app`, where class deletions must propagate.
 
@@ -250,8 +208,8 @@ tasks.register<Sync>("stageShadok") {
 This is Gradle's standard `Sync` task: it copies compiled classes/resources into the mirror and removes stale staged files. It does not contact Kubernetes. After activation in chapter 7, run:
 
 ```sh
-shadok build --config shadok.yaml --group service \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT" \
+shadok build --session "$NAMESPACE/quarkus-live" \
+  --url "$SYNC_URL" --ca-file "$SYNC_CA" \
   -- ./gradlew clean stageShadok
 ```
 
@@ -264,13 +222,13 @@ set -e
 ./mvnw clean verify -Dquarkus.container-image.build=false -Dquarkus.container-image.push=false
 mkdir -p target/shadok-sync/dev/app
 cp -R target/classes/. target/shadok-sync/dev/app/
-shadok publish --config shadok.yaml --group service \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
+shadok publish --session "$NAMESPACE/quarkus-live" \
+  --url "$SYNC_URL" --ca-file "$SYNC_CA"
 ```
 
 `clean` removes stale compiler and staged files before rebuilding. Only a successful build reaches publication. This updates classes/resources; it does not regenerate the mounted mutable package. Changes to dependencies, extensions or build-time configuration are outside this classes-only update. They require the project's normal artifact delivery process.
 
-For a private gateway CA, add `--ca-file /path/to/company-ca.pem` to the Shadok command, before `--` in the Gradle wrapper. The workstation/CI runner needs gateway access; its daemon does not need kubeconfig. Do not run concurrent builds into the same output directory.
+For a private gateway CA, set `SYNC_CA` to its absolute PEM file path; otherwise leave it empty. The workstation/CI runner needs gateway access; its daemon does not need kubeconfig. Do not run concurrent builds into the same output directory.
 
 This route uses Shadok for transport. Do not simultaneously start Quarkus's separate HTTP `remote-dev` synchronization client against the same application.
 
@@ -305,9 +263,11 @@ Pod UID, application container ID and restart count must remain unchanged. Platf
 
 ## 8. Return to production
 
+Run from the same project directory as publication/watch, with the same `SYNC_URL` and `SYNC_CA`. These values identify the local synchronization job.
+
 ```sh
-shadok unwatch --config shadok.yaml --group service \
-  --url "$SYNC_URL" --namespace "$NAMESPACE" --deployment "$DEPLOYMENT"
+shadok unwatch --session "$NAMESPACE/quarkus-live" \
+  --url "$SYNC_URL" --ca-file "$SYNC_CA"
 kubectl --context "$CONTEXT" -n "$NAMESPACE" patch developmentsession quarkus-live \
   --type merge -p '{"spec":{"enabled":false}}'
 kubectl --context "$CONTEXT" -n "$NAMESPACE" get developmentsession quarkus-live -o yaml

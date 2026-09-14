@@ -20,6 +20,7 @@ spec:
     - name: application
       imagePath: /VERIFIED/IMAGE/DIRECTORY
       mountPath: /LIVE/DIRECTORY
+      localPath: ACTUAL_BUILD_OUTPUT_DIRECTORY
   start:
     command: [EXECUTABLE]
     args: [ARGUMENT_1, ARGUMENT_2]
@@ -31,40 +32,28 @@ Save as `session.yaml` in the target project or add these values through its exi
 | Field | What the agent must configure |
 | --- | --- |
 | `deployment`, `container` | Existing workload and application container |
-| `directories[].name` | Logical name reused by `roots[].mount` in the local config |
+| `directories[].name` | Name of the live directory; the CLI reads it from the session |
 | `imagePath` | Existing directory copied from the image to initialize the volume |
 | `mountPath` | Directory mounted in the application for synchronized files |
+| `localPath` | Corresponding source/build directory relative to the CLI working directory; omit for directories not synchronized |
+| `exclude` | Files/directories to keep outside the mirror |
 | `start.command/args` | Exact executable and arguments established by the runtime guide |
 | `workingDir` | Directory needed for relative imports, classpath or application paths |
 
-**`imagePath` copies a directory; it does not extract JARs, install dependencies or infer frameworks.** For archives, configure `spec.init` with a standard tooling image and extraction command as shown in the complete Spring guide. A mount seeded from a verified empty image directory must be populated before the application starts.
+**`imagePath` copies a directory; it does not extract JARs, install dependencies or infer frameworks.** For archives, configure `spec.init` with a standard tooling image and extraction command as shown in the complete Spring guide. Omit `imagePath` for an empty working volume.
 
-Volume/tool provisioning belongs in the existing platform Deployment. `spec.init` runs ordered initialization containers after seeding and mounts the declared live directories. It does not import application artifacts from another image or invent a framework configuration. Extra platform tool volumes remain declared in the existing Deployment. `spec.image`, when explicitly selected, changes both application and seed image.
+The operator owns additional mounts declared in `spec.volumes`. `spec.init` runs ordered initialization containers after seeding and tool-file preparation. No preliminary patch of the application Deployment is required.
 
-## 2. Map local files
+## 2. Apply and activate
 
-Create `shadok.yaml` in the application repository:
-
-```yaml
-version: 1
-project: PROJECT_NAME
-groups:
-  service:
-    mode: build
-    roots:
-      - mount: application
-        path: ACTUAL_BUILD_OUTPUT_DIRECTORY
-```
-
-Use paths relative to this file. Use `mode: watch` only for source trees that can be consumed directly by the live process. Each root mirrors its directory, including deletions; do not include dependencies or files owned by the image in that root.
-
-## 3. Select the destination
-
-Follow `shadok learn network`. The destination names the gateway origin, application namespace and Deployment, not the session name.
-
-## 4. Apply and activate
+Set the values used in the manifest and select the gateway:
 
 ```sh
+export CONTEXT=YOUR_CONTEXT
+export NAMESPACE=YOUR_APPLICATION_NAMESPACE
+export SESSION=YOUR_DEVELOPMENTSESSION_NAME
+export SHADOK_URL=https://YOUR_SYNC_GATEWAY
+export SYNC_CA="" # Set an absolute PEM CA path only for a private gateway CA.
 kubectl --context "$CONTEXT" apply -f session.yaml
 kubectl --context "$CONTEXT" -n "$NAMESPACE" patch developmentsession "$SESSION" \
   --type merge -p '{"spec":{"enabled":true}}'
@@ -73,4 +62,28 @@ kubectl --context "$CONTEXT" -n "$NAMESPACE" get developmentsession "$SESSION" -
 
 Verify Ready=True for the current observed generation, then check application readiness and its URL. Do not publish into a session whose bootstrap/startup has failed.
 
-Run the configured build/watch command from `shadok learn builds`, then perform `shadok learn verify`.
+## 3. Publish to the session
+
+Run in the application project, after a successful build and any staging required by its runtime guide:
+
+```sh
+shadok publish --session "$NAMESPACE/$SESSION" --ca-file "$SYNC_CA"
+```
+
+The gateway address identifies the cluster; `--session` identifies the DevelopmentSession resource, not the Deployment. The CLI reads `localPath` and `exclude` from that session and starts or reuses the daemon. No local synchronization YAML, group or Kubernetes credentials are needed.
+
+Use `shadok learn builds` for build/watch integration and `shadok learn verify` for HTTP checks. To remove the local job, run from this same project directory with the same gateway and CA values:
+
+```sh
+shadok unwatch --session "$NAMESPACE/$SESSION" --ca-file "$SYNC_CA"
+```
+
+This stops synchronization; restore production by setting the session's `spec.enabled` to false as shown in the runtime guide.
+
+## Additional live volumes
+
+Declare tools and extra mounts in `spec.volumes` of the DevelopmentSession. The operator attaches them only to the application container and removes them when restoring production. They are not exposed to the synchronization receiver. Do not patch the application Deployment beforehand.
+
+Each entry has `name`, `mountPath`, optional `readOnly`, and exactly one source: `persistentVolumeClaim`, `configMap`, `secret`, or `files`. Existing Kubernetes resources must be in the session namespace. `files` provisions an emptyDir and downloads the declared HTTPS URLs with SHA256 verification before application startup. Each file requires `path` (a filename), `url`, and `sha256`. See `shadok learn spring` for a complete configuration.
+
+Omit a directory's `imagePath` to create an empty working directory for initialization or synchronization. Set it when files must be copied from the application image.

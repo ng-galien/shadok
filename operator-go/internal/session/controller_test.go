@@ -32,6 +32,7 @@ func TestEnableRestorePreservesDeployment(t *testing.T) {
 	r, s, d := fixture(t)
 	ctx := context.Background()
 	original := d.DeepCopy()
+	s.Spec.Volumes = []api.SessionVolume{{Name: "devtools", MountPath: "/opt/devtools", ReadOnly: true, PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "tools", ReadOnly: true}}}
 	if err := r.enable(ctx, s); err != nil {
 		t.Fatal(err)
 	}

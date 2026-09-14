@@ -153,6 +153,7 @@ session:
   directories: []
   # Ordered commands after seeding; all live directories are mounted in each step.
   init: []
+  volumes: []
   start:
     command: []
     args: []

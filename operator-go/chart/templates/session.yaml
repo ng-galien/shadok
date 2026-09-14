@@ -23,6 +23,9 @@ spec:
   {{- with .Values.session.init }}
   init: {{ toJson . }}
   {{- end }}
+  {{- with .Values.session.volumes }}
+  volumes: {{ toJson . }}
+  {{- end }}
   start:
     command: {{ required "session.start.command must define the live command" .Values.session.start.command | toJson }}
     args: {{ .Values.session.start.args | toJson }}

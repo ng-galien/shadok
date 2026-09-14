@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.0
+
+- Replace incompatible local daemons automatically while retaining persisted synchronization jobs.
+
+- Publish, build and watch by DevelopmentSession name through the gateway, using local output paths declared in the session without a local YAML file or group.
+
+- Manage additional live volumes and mounts through `DevelopmentSession.spec.volumes`, with automatic removal during restoration.
+- Provision SHA256-verified tool files before application startup; Spring DevTools no longer requires an upload pod or a production Deployment patch.
+- Allow empty live directories without seeding an arbitrary directory from the image.
+- Document session-owned Spring and Quarkus mounts and validate endpoint additions/removals in live tests.
+- Update GitHub Actions to Node.js 24, reuse exact-commit main verification for releases, reuse compiled binaries for Kind images, and persist Go/BuildKit caches.
+
 ## 1.2.0
 
 - Add `shadok upgrade cli` with release checksum verification and atomic binary replacement.

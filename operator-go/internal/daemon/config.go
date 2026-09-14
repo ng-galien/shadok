@@ -18,6 +18,7 @@ type Config struct {
 	Groups  map[string]Group `json:"groups"`
 }
 type Destination struct {
+	Session    string `json:"session,omitempty"`
 	Deployment string `json:"deployment,omitempty"`
 	Namespace  string `json:"namespace"`
 	CAFile     string `json:"caFile,omitempty"`

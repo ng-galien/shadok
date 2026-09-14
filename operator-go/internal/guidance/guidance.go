@@ -51,8 +51,9 @@ Development commands:
   daemon serve|stop         Run the daemon foreground, or stop all local jobs
 
 Options for watch/publish/build/unwatch:
-  --config FILE             Project YAML (default: shadok.yaml)
-  --group NAME              Configured group (required)
+  --session NAMESPACE/NAME  Read source/output mappings from the DevelopmentSession
+  --config FILE             Optional legacy local project YAML
+  --group NAME              Group only when using --config
   --destination NAME        Personal destination (default: SHADOK_DESTINATION)
   --url URL                 Sync gateway origin, including http(s)://
   --namespace NAME          Existing application namespace

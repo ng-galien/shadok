@@ -4,8 +4,6 @@ ARG RUNTIME_IMAGE=gcr.io/distroless/static:nonroot
 FROM --platform=$BUILDPLATFORM ${BUILD_IMAGE} AS build
 ARG TARGETOS=linux
 ARG TARGETARCH
-ARG VERSION=dev
-ARG IMAGE_PREFIX
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -14,6 +12,8 @@ COPY internal internal
 COPY cmd cmd
 COPY assets.go ./
 COPY chart chart
+ARG VERSION=dev
+ARG IMAGE_PREFIX
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X shadok.org/operator/internal/buildinfo.Version=$VERSION -X shadok.org/operator/internal/buildinfo.ImagePrefix=$IMAGE_PREFIX" -o /out/operator ./cmd/operator \
  && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X shadok.org/operator/internal/buildinfo.Version=$VERSION -X shadok.org/operator/internal/buildinfo.ImagePrefix=$IMAGE_PREFIX" -o /out/gateway ./cmd/gateway \
  && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X shadok.org/operator/internal/buildinfo.Version=$VERSION -X shadok.org/operator/internal/buildinfo.ImagePrefix=$IMAGE_PREFIX" -o /out/shadok ./cmd/shadok

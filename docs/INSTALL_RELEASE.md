@@ -1,10 +1,10 @@
 # Install a published Shadok release
 
-This is the consumer path: no Go compiler or Shadok source build is required. Use an actually published version from [GitHub Releases](https://github.com/ng-galien/shadok/releases). The commands below target 1.2.0; confirm that version is published before downloading.
+This is the consumer path: no Go compiler or Shadok source build is required. Use an actually published version from [GitHub Releases](https://github.com/ng-galien/shadok/releases). The commands below target 1.3.0; confirm that version is published before downloading.
 
 ## Download the CLI
 
-Download `shadok_1.2.0_darwin_arm64.tar.gz` for Apple Silicon, `darwin_amd64` for Intel macOS, or `linux_amd64` / `linux_arm64` for Linux. Windows users need a Linux environment such as WSL. Download `SHA256SUMS-1.2.0`, check the archive's SHA-256 against its line in that file, extract it, and place `shadok` on PATH. The archive includes LICENSE.
+Download `shadok_1.3.0_darwin_arm64.tar.gz` for Apple Silicon, `darwin_amd64` for Intel macOS, or `linux_amd64` / `linux_arm64` for Linux. Windows users need a Linux environment such as WSL. Download `SHA256SUMS-1.3.0`, check the archive's SHA-256 against its line in that file, extract it, and place `shadok` on PATH. The archive includes LICENSE.
 
 ```sh
 shadok --version
@@ -20,20 +20,20 @@ These guides are embedded and work offline. `shadok chart export ./shadok-chart`
 
 ## Install the operator from GHCR
 
-Use Helm 3/4. The 1.2.0 chart requires Kubernetes 1.25+ because its CRD uses CEL validation (enabled by default since 1.25). Runtime validation covers 1.36.1, not every version above the floor. The platform administrator installs the CRD and operator; developers only need permissions on DevelopmentSession resources and access to the sync endpoint. On a workstation, Docker and Kind supply an isolated Kubernetes environment:
+Use Helm 3/4. The 1.3.0 chart requires Kubernetes 1.25+ because its CRD uses CEL validation (enabled by default since 1.25). Runtime validation covers 1.36.1, not every version above the floor. The platform administrator installs the CRD and operator; developers only need permissions on DevelopmentSession resources and access to the sync endpoint. On a workstation, Docker and Kind supply an isolated Kubernetes environment:
 
 ```sh
 kind create cluster --name shadok-professional --kubeconfig ./shadok-kind.kubeconfig
-helm pull oci://ghcr.io/ng-galien/shadok/charts/shadok --version 1.2.0
+helm pull oci://ghcr.io/ng-galien/shadok/charts/shadok --version 1.3.0
 helm upgrade --install shadok oci://ghcr.io/ng-galien/shadok/charts/shadok \
-  --version 1.2.0 --kubeconfig ./shadok-kind.kubeconfig \
+  --version 1.3.0 --kubeconfig ./shadok-kind.kubeconfig \
   --kube-context kind-shadok-professional \
   --namespace shadok-system --create-namespace \
   --values deployment-values.yaml --wait --timeout 5m
 helm --kubeconfig ./shadok-kind.kubeconfig test shadok -n shadok-system --logs
 ```
 
-Prepare `deployment-values.yaml` using the [chart reference](../operator-go/chart/README.md). For an initial private local install it may contain `{}`; this installs the infrastructure with a ClusterIP gateway, not an externally reachable development endpoint. For a usable development environment, configure gateway exposure, namespaces and TLS as below. The OCI chart already references `ghcr.io/ng-galien/shadok/{operator,gateway,tools}:1.2.0`. No `helm repo add` is needed for OCI. Helm can also download/unpack the chart or reference it as a versioned OCI dependency in your platform chart.
+Prepare `deployment-values.yaml` using the [chart reference](../operator-go/chart/README.md). For an initial private local install it may contain `{}`; this installs the infrastructure with a ClusterIP gateway, not an externally reachable development endpoint. For a usable development environment, configure gateway exposure, namespaces and TLS as below. The OCI chart already references `ghcr.io/ng-galien/shadok/{operator,gateway,tools}:1.3.0`. No `helm repo add` is needed for OCI. Helm can also download/unpack the chart or reference it as a versioned OCI dependency in your platform chart.
 
 Public GHCR packages allow anonymous pulls. For a corporate registry mirror, override all three image repositories; configure imagePullSecrets in each namespace that pulls private images, including application namespaces for the tools image. Your workstation and Kind nodes must be allowed to reach the registries and trust the relevant CA. Registry access and sync endpoint access are separate.
 
@@ -57,7 +57,7 @@ The same guides are embedded in `shadok learn spring|quarkus|node|python`. They 
 After a release, run from the repository using Python 3.12+, curl, Helm, Docker, Kind and kubectl:
 
 ```sh
-python3 operator-go/test/e2e/release_smoke.py --version 1.2.0
+python3 operator-go/test/e2e/release_smoke.py --version 1.3.0
 ```
 
 This downloads the CLI without GitHub credentials, verifies checksums, pulls the public chart using empty Helm credentials, creates a fresh `shadok-release-smoke` cluster with loopback port mappings, and installs Shadok from GHCR. It builds only the test application locally. It checks CR-only activation, two replicas, HTTPS synchronization, failed/successful build publication, updates/deletions, pod replacement, exact restoration and Helm connectivity. No port-forward is used. The cluster is retained for inspection; the script refuses to reuse it. Evidence is written under the printed temporary consumer directory. Inspect it before explicitly deleting this disposable cluster and rerunning.

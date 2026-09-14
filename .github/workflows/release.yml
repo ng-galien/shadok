@@ -7,14 +7,16 @@ concurrency:
   cancel-in-progress: false
 permissions:
   contents: read
+  actions: read
 jobs:
   guard:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       version: ${{ steps.guard.outputs.version }}
+      verified: ${{ steps.verified.outputs.verified }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Validate actual default branch, tag, commit and source version
@@ -28,13 +30,22 @@ jobs:
           default_branch=$(gh api "repos/$REPOSITORY" --jq .default_branch)
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main "+$RELEASE_REF:$RELEASE_REF"
           python3 operator-go/scripts/release_guard.py --ref "$RELEASE_REF" --sha "$RELEASE_SHA" --default-branch "$default_branch"
+      - name: Reuse successful main verification of this exact commit
+        id: verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: python3 operator-go/scripts/verified_commit.py
   verify:
     needs: guard
+    if: needs.guard.outputs.verified != 'true'
     uses: ./.github/workflows/verify.yml
     permissions:
       contents: read
   publish:
     needs: [guard, verify]
+    if: always() && needs.guard.result == 'success' && (needs.verify.result == 'success' || (needs.verify.result == 'skipped' && needs.guard.outputs.verified == 'true'))
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -47,13 +58,23 @@ jobs:
       RELEASE_REF: ${{ github.ref }}
       RELEASE_SHA: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: operator-go/go.mod
-          cache-dependency-path: operator-go/go.sum
+          cache: false
+      - name: Restore Go module and compilation caches
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('operator-go/go.mod', 'operator-go/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ hashFiles('operator-go/go.mod', 'operator-go/go.sum') }}-
+            go-${{ runner.os }}-
       - name: Recheck release identity immediately before preparation
         run: |
           default_branch=$(gh api "repos/$REPOSITORY" --jq .default_branch)
@@ -87,15 +108,24 @@ jobs:
           else
             gh release create "v$VERSION" --repo "$REPOSITORY" --verify-tag --draft --title "Shadok $VERSION" --notes-file CHANGELOG.md
           fi
-      - name: Authenticate registries and create isolated builder
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+        with:
+          name: shadok-release
+      - name: Restore BuildKit cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/shadok-buildkit
+          key: buildkit-${{ runner.os }}-${{ hashFiles('operator-go/go.sum', 'operator-go/Dockerfile') }}-${{ github.sha }}
+          restore-keys: |
+            buildkit-${{ runner.os }}-${{ hashFiles('operator-go/go.sum', 'operator-go/Dockerfile') }}-
+            buildkit-${{ runner.os }}-
+      - name: Authenticate registries
         run: |
           printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           printf '%s' "$GH_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          docker buildx create --name shadok-release --driver docker-container --use
-          docker buildx inspect --bootstrap
       - name: Publish multi-platform images and chart
         run: |
-          python3 operator-go/scripts/images.py --version "$VERSION" --image-prefix "$IMAGE_PREFIX" --builder shadok-release --output dist --push
+          python3 operator-go/scripts/images.py --version "$VERSION" --image-prefix "$IMAGE_PREFIX" --builder shadok-release --cache-dir "$RUNNER_TEMP/shadok-buildkit" --output dist --push
           helm push "dist/shadok-$VERSION.tgz" "oci://$IMAGE_PREFIX/charts"
           mkdir -p /tmp/shadok-published-chart
           helm pull "oci://$IMAGE_PREFIX/charts/shadok" --version "$VERSION" --destination /tmp/shadok-published-chart

@@ -37,6 +37,8 @@ type Server struct {
 	jobs map[string]*Job
 }
 
+const ProtocolVersion = 2
+
 func ID(config, group string, d Destination) string {
 	b, _ := json.Marshal([]any{config, group, d})
 	s := sha256.Sum256(b)
@@ -88,6 +90,11 @@ func Serve(ctx context.Context, dir string) error {
 	mux.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "stopping")
 		go func() { time.Sleep(50 * time.Millisecond); cancel() }()
+	})
+	mux.HandleFunc("/protocol", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(struct {
+			Version int `json:"version"`
+		}{ProtocolVersion})
 	})
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "shadok-daemon-v1") })
 	mux.HandleFunc("/jobs", func(w http.ResponseWriter, r *http.Request) {

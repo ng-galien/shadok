@@ -1,0 +1,18 @@
+# CI already built and tested these static Linux binaries with make verify.
+FROM gcr.io/distroless/static:nonroot AS runtime
+COPY chart/LICENSE /usr/share/licenses/shadok/LICENSE
+USER 65532:65532
+
+FROM runtime AS tools
+COPY bin/shadok /shadok
+ENTRYPOINT ["/shadok"]
+
+FROM runtime AS gateway
+COPY bin/gateway /gateway
+EXPOSE 8080
+ENTRYPOINT ["/gateway"]
+
+FROM runtime AS operator
+COPY bin/operator /operator
+EXPOSE 9000
+ENTRYPOINT ["/operator"]

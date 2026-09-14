@@ -3,6 +3,7 @@
 import argparse
 import json
 import pathlib
+import shutil
 import subprocess
 
 from release_common import checksums, validate
@@ -17,6 +18,7 @@ def main():
     parser.add_argument('--build-image', default='golang:1.26')
     parser.add_argument('--runtime-image', default='gcr.io/distroless/static:nonroot')
     parser.add_argument('--output', default='dist')
+    parser.add_argument('--cache-dir', help='Optional persistent BuildKit local cache directory')
     parser.add_argument('--push', action='store_true', help='Publish to the supplied registry instead of local OCI archives')
     args = parser.parse_args()
     try:
@@ -44,6 +46,12 @@ def main():
                    '--tag', f'{args.image_prefix}/{component}:{args.version}',
                    '--metadata-file', str(metadata)]
         artifacts.append(metadata)
+        if args.cache_dir:
+            cache = pathlib.Path(args.cache_dir).resolve() / 'shared'
+            next_cache = cache.with_name('shared-next')
+            if (cache / 'index.json').is_file():
+                command += ['--cache-from', f'type=local,src={cache}']
+            command += ['--cache-to', f'type=local,dest={next_cache},mode=max']
         if args.push:
             command.append('--push')
         else:
@@ -51,6 +59,11 @@ def main():
             command += ['--output', f'type=oci,dest={archive}']
             artifacts.append(archive)
         subprocess.run(command + [str(root)], check=True)
+        if args.cache_dir:
+            # Rotate only after a successful export; retain the old cache on failure.
+            if cache.exists():
+                shutil.rmtree(cache)
+            next_cache.rename(cache)
     manifest = out / f'images-{args.version}.json'
     manifest.write_text(json.dumps({
         'version': args.version, 'platforms': platforms,

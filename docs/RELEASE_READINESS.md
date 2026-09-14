@@ -2,6 +2,10 @@
 
 Branch pushes prepare reviewable local artifacts only. The tag-only release workflow publishes GitHub release assets and GHCR images/chart after its identity guard and full verification succeed. No tag or release is created by a branch push. A successful local run is separate from a successful GitHub Actions run and from public availability.
 
+The tag reuses a successful `verify.yml` push run on `main` only for the exact tagged commit in this repository. Without that evidence, it runs the full verification workflow. An API lookup failure also falls back to full verification.
+
+Go module and compilation caches are refreshed per commit with dependency-key fallback. Kind images package the static Linux binaries already built by `make verify`; they do not compile them again. Release image builds share a persistent BuildKit cache, rotated only after successful export. Cache misses affect speed, never whether checks run.
+
 ## Automated verification
 
 The verification workflow runs on pushes, pull requests and manual dispatch with read-only repository permissions. It pins action revisions and the Ubuntu runner family, verifies the downloaded Helm checksum, and checks:

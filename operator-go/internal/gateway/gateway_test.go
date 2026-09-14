@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,6 +15,49 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"testing"
 )
+
+func TestSessionDescriptionUsesResourceNameAndOnlyDeclaredOutputs(t *testing.T) {
+	scheme := runtime.NewScheme()
+	api.AddToScheme(scheme)
+	s := &api.DevelopmentSession{ObjectMeta: metav1.ObjectMeta{Name: "live", Namespace: "team"}, Spec: api.SessionSpec{Enabled: true, Deployment: "different-deployment", Directories: []api.Directory{{Name: "packaged", ImagePath: "/app", MountPath: "/live/app"}, {Name: "classes", MountPath: "/live/classes", LocalPath: "target/classes"}}}}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(s).Build()
+	h := httptest.NewServer(&Handler{Resolver: KubernetesResolver{Reader: reader, Namespaces: map[string]bool{"team": true}}})
+	defer h.Close()
+	res, err := h.Client().Get(h.URL + "/sessions/team/live")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var result struct {
+		Roots []syncer.Root `json:"roots"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Roots) != 1 || result.Roots[0].Mount != "classes" || result.Roots[0].Path != "target/classes" {
+		t.Fatalf("unexpected outputs: %+v", result)
+	}
+	for _, route := range []string{"/sessions/team/different-deployment", "/sessions/other/live"} {
+		res, err := h.Client().Get(h.URL + route)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode == 200 {
+			t.Fatalf("unexpected resolution of %s", route)
+		}
+	}
+	s.Spec.Enabled = false
+	reader.Update(context.Background(), s)
+	res, err = h.Client().Get(h.URL + "/sessions/team/live")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode == 200 {
+		t.Fatal("disabled session accepted")
+	}
+}
 
 type resolverFunc func(context.Context, string, string) ([]Target, error)
 
@@ -31,7 +75,7 @@ func TestRoutesFanoutAndReplacement(t *testing.T) {
 	}
 	targets := []Target{{UID: "one", URL: servers[0].URL}, {UID: "two", URL: servers[1].URL}}
 	gateway := httptest.NewServer(&Handler{Resolver: resolverFunc(func(_ context.Context, ns, dep string) ([]Target, error) {
-		if ns != "team" || dep != "app" {
+		if (ns != "team" && ns != "sessions") || dep != "app" {
 			return nil, fmt.Errorf("not configured")
 		}
 		return targets, nil
@@ -50,6 +94,9 @@ func TestRoutesFanoutAndReplacement(t *testing.T) {
 	}
 	if err := send("/team/app"); err != nil {
 		t.Fatal(err)
+	}
+	if err := send("/sessions/app"); err != nil {
+		t.Fatalf("legacy namespace named sessions must remain routable: %v", err)
 	}
 	for _, root := range roots[:2] {
 		b, err := os.ReadFile(filepath.Join(root, "file"))

@@ -43,6 +43,8 @@ with tempfile.TemporaryDirectory(prefix='shadok-quarkus-framework-') as td:
  kub('-n',NS,'cp',str(kit)+'/.','reload-tools-loader:/tools')
  kub('-n',NS,'delete','pod','reload-tools-loader','--wait=true')
  d={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':NAME,'namespace':NS},'spec':{'replicas':1,'selector':{'matchLabels':{'app':NAME}},'template':{'metadata':{'labels':{'app':NAME},'annotations':{'platform.example/preserved':'yes'}},'spec':{'securityContext':{'fsGroup':185},'containers':[{'name':'app','image':'shadok-quarkus:local','imagePullPolicy':'Never','env':[{'name':'PLATFORM_VALUE','value':'preserved'}],'resources':{'requests':{'memory':'128Mi','cpu':'100m'},'limits':{'memory':'1Gi'}},'readinessProbe':{'httpGet':{'path':'/hello','port':8080},'periodSeconds':2},'volumeMounts':[{'name':'tools','mountPath':'/opt/quarkus-reload','readOnly':True}]}],'volumes':[{'name':'tools','persistentVolumeClaim':{'claimName':'reload-tools','readOnly':True}}]}}}}
+ d['spec']['template']['spec'].pop('volumes')
+ d['spec']['template']['spec']['containers'][0].pop('volumeMounts')
  apply(d);apply({'apiVersion':'v1','kind':'Service','metadata':{'name':NAME,'namespace':NS},'spec':{'selector':{'app':NAME},'ports':[{'port':8080,'targetPort':8080}]}})
  kub('-n',NS,'rollout','status','deployment/'+NAME,'--timeout=180s');original=get('deployment',NAME)['spec'];production=identity()
  p=pods()[0]['metadata']['name'];logs=kub('-n',NS,'logs',p,'-c','app');assert 'Profile prod activated' in logs and 'Live Coding activated' not in logs
@@ -61,6 +63,7 @@ with tempfile.TemporaryDirectory(prefix='shadok-quarkus-framework-') as td:
   command=[str(work/'gradlew'),'--no-daemon',*(['clean'] if clean else []),'stageShadok','-Dquarkus.container-image.build=false']
   subprocess.run([str(BIN),'build',*common,'--',*command],cwd=work,env=env,check=True)
  session={'apiVersion':'shadok.org/v1alpha1','kind':'DevelopmentSession','metadata':{'name':NAME,'namespace':NS},'spec':{'enabled':True,'deployment':NAME,'container':'app','runAsUser':185,'runAsGroup':185,'directories':[{'name':'application','imagePath':'/deployments','mountPath':'/live/quarkus'}],'start':{'command':['sh'],'args':['-ec','cp -R /opt/quarkus-reload/lib/deployment /live/quarkus/lib/\ncp /opt/quarkus-reload/quarkus/build-system.properties /live/quarkus/quarkus/\nexport QUARKUS_LAUNCH_DEVMODE=true\nexec java -Dquarkus.http.host=0.0.0.0 -Dquarkus.profile=prod -Dquarkus.console.enabled=false -jar /live/quarkus/quarkus-run.jar'],'workingDir':'/live/quarkus'}}}
+ session['spec']['volumes']=[{'name':'quarkus-tools','mountPath':'/opt/quarkus-reload','readOnly':True,'persistentVolumeClaim':{'claimName':'reload-tools','readOnly':True}}]
  try:
   apply(session);wait(lambda:get('deployment',NAME)['spec']['template']['metadata'].get('annotations',{}).get('shadok.org/live-session'),'live activation');kub('-n',NS,'rollout','status','deployment/'+NAME,'--timeout=180s')
   live=identity();assert live[3]==production[3];p=pods()[0]['metadata']['name']

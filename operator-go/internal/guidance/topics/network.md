@@ -30,7 +30,7 @@ kubectl -n shadok-system get ingress,service,pods
 Select the intended Kubernetes context before running these commands.
 
 - Point DNS at the reachable Ingress address; do not configure pod IPs.
-- Preserve `/namespace/deployment/plan` and `/namespace/deployment/apply`; do not strip these paths.
+- Preserve `/sessions/namespace/session-name` and its `/plan` and `/apply` paths; do not strip these paths. Legacy clients also use `/namespace/deployment/plan` and `/namespace/deployment/apply`.
 - This example terminates TLS at the Ingress. If enabling gateway TLS, configure an HTTPS backend too.
 - Allow gateway-to-application TCP 7777 and operator/gateway access to the Kubernetes API.
 - Restrict gateway access to a trusted network or compatible authentication proxy.
@@ -40,29 +40,18 @@ For local Kind with Traefik/nip.io, follow `docs/LOCAL_INGRESS.md`. A loopback h
 
 ## Developer / CI: select the destination
 
-Save `~/.config/shadok/destinations.yaml`:
-
-```yaml
-version: 1
-destinations:
-  team-dev:
-    url: https://sync.example.com
-    namespace: team-a
-    deployment: orders
-    # For a private CA:
-    # caFile: /absolute/path/to/company-ca.pem
-```
-
-Use the gateway origin only: do not append namespace or endpoint paths. Set the application's namespace and Deployment name, not the operator namespace or session name.
+Run from the project root. Use the gateway origin and the namespace/name of the `DevelopmentSession`:
 
 ```sh
-export SHADOK_DESTINATIONS="$HOME/.config/shadok/destinations.yaml"
-export SHADOK_DESTINATION=team-dev
-shadok build --config shadok.yaml --group service -- mvn verify
+export SHADOK_URL=https://sync.example.com
+export SYNC_CA="" # Set an absolute PEM CA path only for a private gateway CA.
+shadok build --session team-a/orders-live --ca-file "$SYNC_CA" -- mvn clean verify
 shadok status
 ```
 
-Replace the group and build command with your project's settings. For source synchronization, use `shadok watch --config shadok.yaml --group source`.
+The session declares each local output with `spec.directories[].localPath`, relative to this project root. No local configuration file or group is required. The gateway resolves the session's target Deployment and receivers.
+
+For already built files, use `shadok publish --session team-a/orders-live --ca-file "$SYNC_CA"`. For source synchronization, use `shadok watch --session team-a/orders-live --ca-file "$SYNC_CA"`. Set `SYNC_CA` to the absolute PEM CA path if your gateway uses a private CA; otherwise leave it empty. To stop this job, run `shadok unwatch --session team-a/orders-live --ca-file "$SYNC_CA"` from the same project directory with the same gateway and CA values.
 
 The workstation/runner needs gateway network access and CA trust; synchronization does not use Kubernetes credentials.
 

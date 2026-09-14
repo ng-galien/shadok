@@ -11,7 +11,7 @@ Choose **one** guide. Each contains the image inspection, required files, YAML c
 | Node.js, TypeScript or Vite | `shadok learn node` |
 | Python | `shadok learn python` |
 
-Start with the production image and Deployment actually used by your project. Keep the existing chart/Helmfile, routing and configuration. The platform must supply any missing runtime tools; file synchronization alone cannot add reload behavior to an arbitrary image.
+Start with the production image and Deployment actually used by your project. Keep the existing chart/Helmfile, routing and configuration. Declare supported tool files or existing tool volumes in the session; the operator prepares their mounts. Other missing runtime dependencies must be supplied by the platform. File synchronization alone does not add reload behavior.
 
 ## 2. Administer Shadok — platform team
 
@@ -22,7 +22,7 @@ Start with the production image and Deployment actually used by your project. Ke
 | Update the CLI or cluster installation | `shadok learn upgrade` |
 | Disable/delete sessions and restore applications | `shadok learn lifecycle` |
 
-Developers can have permissions only on DevelopmentSessions. They supply required tool/mount configuration to the platform; they do not reproduce or replace the platform's deployments. Synchronization clients need gateway access, not Kubernetes credentials.
+Developers can have permissions only on DevelopmentSessions. They declare tool files and mounts in the session; the platform provides any referenced PVCs, Secrets or ConfigMaps. They do not reproduce or replace the platform's deployments. Synchronization clients need gateway access, not Kubernetes credentials.
 
 ## 3. Reference — optional
 
