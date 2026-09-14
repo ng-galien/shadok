@@ -160,3 +160,7 @@ session:
     command: []
     args: []
     workingDir: ""
+
+# Requires Kubernetes 1.30+. Disable only with equivalent external admission enforcement.
+sessionAdmission:
+  enabled: true

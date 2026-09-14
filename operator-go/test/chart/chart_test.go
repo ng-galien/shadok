@@ -157,11 +157,13 @@ func TestMetadataAndExistingAccounts(t *testing.T) {
 	}
 }
 func TestUnsupportedKubernetes(t *testing.T) {
-	render(t, `{}`, "kubeVersion", "--kube-version", "1.24.0")
+	render(t, `{"sessionAdmission":{"enabled":false}}`, "kubeVersion", "--kube-version", "1.24.0")
 }
 
 func TestKubernetesAPIFloor(t *testing.T) {
-	render(t, `{}`, "", "--kube-version", "1.25.0")
+	render(t, `{"sessionAdmission":{"enabled":false}}`, "", "--kube-version", "1.30.0")
+	render(t, `{}`, "kubeVersion", "--kube-version", "1.29.0")
+	render(t, `{}`, "", "--kube-version", "1.30.0")
 }
 
 func TestPodTemplatePatchPreservesNullAsText(t *testing.T) {

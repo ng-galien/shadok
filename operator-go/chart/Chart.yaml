@@ -1,9 +1,9 @@
 apiVersion: v2
 name: shadok
-version: 1.4.0
-appVersion: "1.4.0"
+version: 1.4.1
+appVersion: "1.4.1"
 description: Generic live transformation of an existing Deployment and HTTP synchronization
 type: application
-kubeVersion: ">=1.25.0-0"
+kubeVersion: ">=1.30.0-0"
 keywords: [kubernetes, development, synchronization, operator]
 sources: [https://github.com/ng-galien/shadok]

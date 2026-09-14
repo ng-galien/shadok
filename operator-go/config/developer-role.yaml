@@ -1,5 +1,7 @@
 # Apply this Role in the application's namespace, then bind it to the developer identity.
 # The platform creates the configured DevelopmentSession through Helm.
+# Requires the chart session admission policy: this Role alone cannot restrict fields.
+# Admission permits enabled changes only unless the caller can patch the target Deployment.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -38,6 +39,7 @@ func NewReceiver(roots map[string]string, token string) *Receiver {
 }
 func (r *Receiver) ServeHTTP(w http.ResponseWriter, q *http.Request) {
 	if r.Token != "" && subtle.ConstantTimeCompare([]byte(q.Header.Get("Authorization")), []byte("Bearer "+r.Token)) != 1 {
+		slog.Warn("receiver request rejected", "path", q.URL.EscapedPath(), "status", 401)
 		http.Error(w, "unauthorized", 401)
 		return
 	}
@@ -55,15 +57,19 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, q *http.Request) {
 	case "/apply":
 		result, err = r.apply(q.Body)
 	default:
+		slog.Warn("receiver route not found", "path", q.URL.EscapedPath(), "status", 404)
 		http.NotFound(w, q)
 		return
 	}
 	if err != nil {
+		slog.Error("receiver request failed", "path", q.URL.EscapedPath(), "error", err, "epoch", r.Epoch)
 		http.Error(w, err.Error(), 400)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		slog.Error("receiver response failed", "path", q.URL.EscapedPath(), "error", err)
+	}
 }
 func (r *Receiver) validate(m Manifest) error {
 	if len(m.Files) > MaxFiles || len(m.Roots) == 0 || ManifestHash(m) != m.Revision {
@@ -130,6 +136,7 @@ func (r *Receiver) plan(m Manifest) (Plan, error) {
 			p.Needed = append(p.Needed, e.Name)
 		}
 	}
+	slog.Info("receiver plan ready", "revision", m.Revision, "files", len(m.Files), "needed", len(p.Needed), "epoch", r.Epoch)
 	return p, nil
 }
 func (r *Receiver) apply(body io.Reader) (Ack, error) {
@@ -277,5 +284,6 @@ func (r *Receiver) apply(body io.Reader) (Ack, error) {
 			return Ack{}, err
 		}
 	}
+	slog.Info("receiver revision applied", "revision", m.Revision, "received", len(received), "files", len(m.Files), "epoch", r.Epoch)
 	return Ack{Revision: m.Revision, Epoch: r.Epoch, Applied: true, PodUID: os.Getenv("SHADOK_POD_UID")}, nil
 }

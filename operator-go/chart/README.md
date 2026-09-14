@@ -2,7 +2,7 @@
 
 The chart installs the Go controller, an independently scalable HTTP gateway, separate service accounts/RBAC, and the `DevelopmentSession` CRD. It can also create a session for an existing application Deployment. It does not build application images or select language runtimes.
 
-Requires Helm 3 or 4 and Kubernetes 1.25 or newer. Local integration is tested on Kubernetes 1.36; rendering is tested with Helm 4.2.4. Image repositories in the source chart are **local placeholders**, not a claim that a public image exists. Use a release package with your registry prefix, or set repositories/tags/digests explicitly.
+Requires Helm 3 or 4 and Kubernetes 1.30 or newer. Local integration is tested on Kubernetes 1.36; rendering is tested with Helm 4.2.4. Image repositories in the source chart are **local placeholders**, not a claim that a public image exists. Use a release package with your registry prefix, or set repositories/tags/digests explicitly.
 
 ```sh
 helm lint operator-go/chart --strict
@@ -91,7 +91,7 @@ Before uninstall, set every managed session to `enabled: false` and wait for `Re
 
 References: [Helm CRD lifecycle](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/), [chart schema](https://helm.sh/docs/topics/charts/), [OCI registries](https://helm.sh/docs/topics/registries/).
 
-The Kubernetes 1.25 chart floor comes from the CRD CEL transition rule that keeps the target Deployment immutable (`CustomResourceValidationExpressions`, enabled by default since 1.25). See [Kubernetes CEL immutability](https://kubernetes.io/blog/2022/09/29/enforce-immutability-using-cel/). This is an API requirement, not a claim that every version above it has passed runtime integration tests. Runtime validation currently covers Kubernetes 1.36; Helm rendering checks the 1.25 floor separately.
+The Kubernetes 1.30 minimum provides stable ValidatingAdmissionPolicy support. Session admission is enabled by default: configuration requires patch permission on the target Deployment; other session editors can only toggle enabled. Runtime validation covers Kubernetes 1.36; Helm rendering checks the 1.30 minimum.
 
 New sessions have no Shadok deletion finalizer. Independent recovery ConfigMaps survive session/CRD deletion and enable asynchronous cleanup after operator restart. Existing legacy finalizers are removed automatically after preserving their recovery data. See `shadok learn lifecycle`.
 

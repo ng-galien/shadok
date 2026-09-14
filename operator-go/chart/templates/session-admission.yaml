@@ -1,0 +1,46 @@
+{{- if and .Values.operator.enabled .Values.sessionAdmission.enabled }}
+{{- if not (semverCompare ">=1.30.0-0" .Capabilities.KubeVersion.Version) }}
+{{- fail "Shadok session admission requires Kubernetes >=1.30. Upgrade the cluster before installing this chart." }}
+{{- end }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ include "shadok.name" . }}-{{ .Release.Namespace }}-sessions
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [shadok.org]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [developmentsessions]
+  variables:
+    - name: session
+      expression: 'request.operation == "DELETE" ? oldObject : object'
+    - name: configurator
+      expression: 'authorizer.group("apps").resource("deployments").namespace(request.namespace).name(variables.session.spec.deployment).check("patch").allowed()'
+  validations:
+    - expression: >-
+        variables.configurator ||
+        (request.operation == "UPDATE" &&
+         {{- $crd := .Files.Get "crds/shadok.org_developmentsessions.yaml" | fromYaml }}
+         {{- range $field, $_ := (index $crd.spec.versions 0).schema.openAPIV3Schema.properties.spec.properties }}
+         {{- if ne $field "enabled" }}
+         object.spec.?{{ $field }} == oldObject.spec.?{{ $field }} &&
+         {{- end }}
+         {{- end }}
+         object.metadata.?labels == oldObject.metadata.?labels &&
+         object.metadata.?annotations == oldObject.metadata.?annotations &&
+         object.metadata.?ownerReferences == oldObject.metadata.?ownerReferences &&
+         object.metadata.?finalizers == oldObject.metadata.?finalizers)
+      message: 'Only enabled may be changed without patch permission on the target Deployment. Configuration, creation and deletion require the platform identity.'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ include "shadok.name" . }}-{{ .Release.Namespace }}-sessions
+spec:
+  policyName: {{ include "shadok.name" . }}-{{ .Release.Namespace }}-sessions
+  validationActions: [Deny]
+
+{{- end }}

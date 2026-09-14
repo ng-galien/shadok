@@ -40,7 +40,8 @@ func main() {
 			allowed[strings.TrimSpace(ns)] = true
 		}
 	}
-	server := &http.Server{Addr: *address, Handler: &gateway.Handler{Resolver: gateway.KubernetesResolver{Reader: c, Namespaces: allowed}}, ReadHeaderTimeout: 10 * time.Second}
+	server := &http.Server{Addr: *address, Handler: gateway.LogRequests(&gateway.Handler{Resolver: gateway.KubernetesResolver{Reader: c, Namespaces: allowed}}), ReadHeaderTimeout: 10 * time.Second}
+	log.Printf("sync gateway listening on %s (TLS=%t)", *address, *cert != "")
 	if *cert != "" {
 		log.Fatal(server.ListenAndServeTLS(*cert, *key))
 	}

@@ -110,3 +110,14 @@ This example disables liveness during live mode and changes CPU only. Readiness 
 Keep the `|`: the patch is YAML text, so `null` deletions survive Helm and `kubectl apply`. The patch uses Kubernetes Strategic Merge Patch rules on the pod template: containers and environment variables merge by name, omitted fields are retained, and `null` removes a field. Lists without a merge strategy are replaced. The operator applies it to the saved production template before adding Shadok's command, mounts and synchronization containers; those session-managed settings take precedence. Deployment selectors and replicas are outside this patch.
 
 Apply changes to the session to trigger a new rollout. Removing a patch field restores that production value; disabling the session restores the production template. No manual Deployment patch is required.
+
+## Session permissions
+
+The operator chart installs a fail-closed Kubernetes ValidatingAdmissionPolicy by default (`sessionAdmission.enabled: true`). This built-in protection requires Kubernetes 1.30 or newer. The chart requires Kubernetes 1.30 or newer. Disable this policy only when the platform already enforces equivalent admission rules. The application-only chart does not install the policy; install the operator infrastructure first.
+
+Use two existing Kubernetes permission levels:
+
+- **Platform / deployment CI:** permission to patch the target Deployment, plus permission to manage DevelopmentSessions. This identity configures sessions, including commands, tools, mounts and template patches.
+- **Developer:** the session Role in `operator-go/config/developer-role.yaml`, limited to the intended namespace/sessions. Without patch permission on the target Deployment, admission permits only changing `spec.enabled`; configuration changes, creation and deletion are denied. Do not grant developers permission to alter admission policies, RBAC or impersonate the platform identity.
+
+The policy checks the caller's Deployment patch permission through Kubernetes authorization. No separate identity list is required. The RBAC Role alone does not restrict fields. Existing sessions are not retroactively validated: the platform must review their configuration before delegating access. Live code retains the application's existing credentials and permissions; use an appropriate development workload and data environment.

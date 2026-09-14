@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-type Target struct{ UID, URL string }
+type Target struct{ UID, URL, Name string }
 type Resolver interface {
 	Resolve(context.Context, string, string) ([]Target, error)
 }
@@ -83,6 +83,7 @@ func (k KubernetesResolver) targets(ctx context.Context, session *api.Developmen
 		return nil, err
 	}
 	targets := []Target{}
+	unavailable := []string{}
 	for _, p := range pods.Items {
 		if !p.DeletionTimestamp.IsZero() || p.Status.PodIP == "" || p.Annotations["shadok.org/live-session"] != string(session.UID) {
 			continue
@@ -94,6 +95,7 @@ func (k KubernetesResolver) targets(ctx context.Context, session *api.Developmen
 			}
 		}
 		if !ready {
+			unavailable = append(unavailable, p.Name+": pod is not Ready")
 			continue
 		}
 		running := false
@@ -103,11 +105,16 @@ func (k KubernetesResolver) targets(ctx context.Context, session *api.Developmen
 			}
 		}
 		if running {
-			targets = append(targets, Target{UID: string(p.UID), URL: "http://" + p.Status.PodIP + ":7777"})
+			targets = append(targets, Target{Name: p.Name, UID: string(p.UID), URL: "http://" + p.Status.PodIP + ":7777"})
+		} else {
+			unavailable = append(unavailable, p.Name+": shadok-sync container is not running")
 		}
 	}
 	if len(targets) == 0 {
-		return nil, fmt.Errorf("no live receiver available")
+		if len(unavailable) > 0 {
+			return nil, fmt.Errorf("session %s/%s: no ready receiver: %s", session.Namespace, session.Name, strings.Join(unavailable, "; "))
+		}
+		return nil, fmt.Errorf("session %s/%s: no eligible live receiver pod found", session.Namespace, session.Name)
 	}
 	sort.Slice(targets, func(i, j int) bool { return targets[i].UID < targets[j].UID })
 	return targets, nil
@@ -210,12 +217,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		q.ContentLength = n
 		res, err := client.Do(q)
 		if err != nil {
-			http.Error(w, "receiver unavailable; retry revision", 503)
+			http.Error(w, fmt.Sprintf("%s pod %s: receiver unavailable: %v", parts[2], target.Name, err), 503)
 			return
 		}
 		if res.StatusCode != 200 {
+			body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
 			res.Body.Close()
-			http.Error(w, "receiver rejected revision", 502)
+			http.Error(w, fmt.Sprintf("%s pod %s: receiver HTTP %d: %s", parts[2], target.Name, res.StatusCode, strings.TrimSpace(string(body))), 502)
 			return
 		}
 		if parts[2] == "plan" {
@@ -236,7 +244,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		res.Body.Close()
 		if err != nil {
-			http.Error(w, "invalid receiver response", 502)
+			http.Error(w, fmt.Sprintf("%s pod %s: invalid receiver response: %v", parts[2], target.Name, err), 502)
 			return
 		}
 	}

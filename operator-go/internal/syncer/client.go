@@ -16,17 +16,17 @@ func Send(ctx context.Context, client *http.Client, url, token string, s *Snapsh
 	raw, _ := json.Marshal(s.Manifest)
 	req, err := http.NewRequestWithContext(ctx, "POST", url+"/plan", bytes.NewReader(raw))
 	if err != nil {
-		return Ack{}, err
+		return Ack{}, fmt.Errorf("plan: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	res, err := client.Do(req)
 	if err != nil {
-		return Ack{}, err
+		return Ack{}, fmt.Errorf("plan: %w", err)
 	}
 	var p Plan
 	err = decode(res, &p)
 	if err != nil {
-		return Ack{}, err
+		return Ack{}, fmt.Errorf("plan: %w", err)
 	}
 	reader, writer := io.Pipe()
 	done := make(chan error, 1)
@@ -76,13 +76,16 @@ func Send(ctx context.Context, client *http.Client, url, token string, s *Snapsh
 	if err != nil {
 		return Ack{}, err
 	}
+	if res.StatusCode != http.StatusOK {
+		return Ack{}, fmt.Errorf("apply: %w", decode(res, nil))
+	}
 	if sendErr != nil {
 		res.Body.Close()
-		return Ack{}, sendErr
+		return Ack{}, fmt.Errorf("apply upload: %w", sendErr)
 	}
 	var ack Ack
 	if err = decode(res, &ack); err != nil {
-		return Ack{}, err
+		return Ack{}, fmt.Errorf("apply: %w", err)
 	}
 	if !ack.Applied || ack.Revision != s.Manifest.Revision || ack.Epoch != p.Epoch {
 		return Ack{}, fmt.Errorf("receiver changed or invalid ACK")
@@ -93,7 +96,7 @@ func decode(res *http.Response, dest any) error {
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
-		return fmt.Errorf("receiver %d: %s", res.StatusCode, b)
+		return fmt.Errorf("sync HTTP %d: %s", res.StatusCode, b)
 	}
 	return json.NewDecoder(io.LimitReader(res.Body, 8<<20)).Decode(dest)
 }

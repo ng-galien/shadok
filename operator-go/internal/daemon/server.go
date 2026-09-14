@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"golang.org/x/sys/unix"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -37,7 +38,7 @@ type Server struct {
 	jobs map[string]*Job
 }
 
-const ProtocolVersion = 2
+const ProtocolVersion = 3
 
 func ID(config, group string, d Destination) string {
 	b, _ := json.Marshal([]any{config, group, d})
@@ -78,14 +79,19 @@ func Serve(ctx context.Context, dir string) error {
 	for _, f := range files {
 		b, e := os.ReadFile(f)
 		if e != nil {
+			log.Printf("daemon state read failed file=%s: %v", f, e)
 			continue
 		}
 		j := &Job{}
-		if json.Unmarshal(b, j) == nil && j.ID != "" {
+		if err := json.Unmarshal(b, j); err != nil {
+			log.Printf("daemon state decode failed file=%s: %v", f, err)
+		} else if j.ID != "" {
 			s.jobs[j.ID] = j
 			go s.loop(ctx, j)
 		}
 	}
+	log.Printf("daemon started socket=%s jobs=%d protocol=%d", socket, len(s.jobs), ProtocolVersion)
+	defer log.Printf("daemon stopped socket=%s", socket)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "stopping")
@@ -164,8 +170,10 @@ func Serve(ctx context.Context, dir string) error {
 func (s *Server) save(j *Job) {
 	b, _ := json.Marshal(j)
 	p := filepath.Join(s.Dir, "job-"+j.ID+".json")
-	if os.WriteFile(p+".tmp", b, 0600) == nil {
-		os.Rename(p+".tmp", p)
+	if err := os.WriteFile(p+".tmp", b, 0600); err != nil {
+		log.Printf("daemon state write failed job=%s path=%s: %v", j.ID, p, err)
+	} else if err := os.Rename(p+".tmp", p); err != nil {
+		log.Printf("daemon state commit failed job=%s path=%s: %v", j.ID, p, err)
 	}
 }
 func (s *Server) loop(ctx context.Context, j *Job) {
@@ -177,6 +185,7 @@ func (s *Server) loop(ctx context.Context, j *Job) {
 			j.mu.Unlock()
 			return
 		}
+		previousError := j.Error
 		scanError := ""
 		if j.Watch {
 			snap, err := syncer.Capture(j.Roots, s.Dir)
@@ -203,6 +212,9 @@ func (s *Server) loop(ctx context.Context, j *Job) {
 				if err != nil {
 					j.Error = err.Error()
 				} else {
+					if j.Ack.Revision != ack.Revision || j.Ack.Epoch != ack.Epoch {
+						log.Printf("sync acknowledged job=%s session=%s/%s revision=%s epoch=%s", j.ID, destination.Namespace, destination.Session, ack.Revision, ack.Epoch)
+					}
 					j.Ack = ack
 					j.Error = ""
 				}
@@ -213,6 +225,18 @@ func (s *Server) loop(ctx context.Context, j *Job) {
 				s.save(j)
 			} else {
 				os.RemoveAll(snapshot.Dir)
+			}
+		}
+		if scanError != "" {
+			j.Error = "source scan: " + scanError
+			j.Updated = time.Now()
+			s.save(j)
+		}
+		if j.Error != previousError {
+			if j.Error != "" {
+				log.Printf("sync failed job=%s session=%s/%s deployment=%s: %s", j.ID, j.Destination.Namespace, j.Destination.Session, j.Destination.Deployment, j.Error)
+			} else {
+				log.Printf("sync recovered job=%s", j.ID)
 			}
 		}
 		j.mu.Unlock()

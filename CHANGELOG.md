@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1
+
+- Preserve downstream synchronization errors in the CLI and log gateway requests, receiver operations, daemon failures/recovery and tool preparation.
+- Enforce session configuration authorization through Kubernetes admission: callers without patch permission on the target Deployment can only toggle enabled.
+- Require Kubernetes 1.30 or newer for the chart and enable admission enforcement by default. Review existing sessions before delegating developer access.
+
 ## 1.4.0
 
 - Apply Kubernetes Strategic Merge Patch from `DevelopmentSession.spec.podTemplatePatch` to customize live pod probes, resources and other template fields, with baseline restoration.

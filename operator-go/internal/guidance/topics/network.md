@@ -55,6 +55,18 @@ For already built files, use `shadok publish --session team-a/orders-live --ca-f
 
 The workstation/runner needs gateway network access and CA trust; synchronization does not use Kubernetes credentials.
 
+## Read synchronization failures
+
+`publish`, `build` and `watch` print delivery errors to stderr while retrying. A timeout includes the last failure and the daemon log path. Run `shadok status` to inspect the job's destination, `error`, `updated` and acknowledgement. The daemon logs changes in failure state and recovery, without repeating the same error every second.
+
+A platform administrator can read gateway errors:
+
+```sh
+kubectl -n shadok-system logs deployment/shadok-gateway --since=10m
+```
+
+Replace the namespace and gateway Deployment name with the installation's values. Gateway failure logs include the HTTP method, route, status and cause. Receiver failures also identify the pod and upstream status. No request headers or upload contents are logged. If the gateway has no matching request, check the client error and the ingress/proxy logs first.
+
 ## Verify and troubleshoot
 
 Publish a build, inspect `shadok status`, then call the application's URL. Use the gateway URL for synchronization and the application URL for HTTP checks.
@@ -68,3 +80,13 @@ Publish a build, inspect `shadok status`, then call the application's URL. Use t
 | 413 | Ingress/gateway upload limit |
 | 502/503 or HTML login page | Proxy policy, backend protocol and gateway logs |
 | ACK but stale application | Runtime command and reload configuration; `shadok learn spring` |
+
+### Logs for each component
+
+- Local daemon: the `daemon.log` path printed on a failed publication. It records startup, state-file failures, sync failures, recovery and acknowledged revisions. `shadok status` shows the latest job error.
+- Gateway: `kubectl -n <operator-namespace> logs deployment/<gateway-deployment> --since=10m`. Requests include method, path, HTTP status and duration; failures include the downstream cause.
+- Receiver: `kubectl -n <application-namespace> logs <live-pod> -c shadok-sync --since=10m`. Look for plan, revision applied, mount validation and filesystem errors.
+- Operator: `kubectl -n <operator-namespace> logs deployment/<operator-deployment> --since=10m`. Look for session transition errors and completed transitions.
+- Initialization: `kubectl -n <application-namespace> get pod <live-pod> -o jsonpath='{.spec.initContainers[*].name}'`, then `kubectl -n <application-namespace> logs <live-pod> -c <init-container>`. Tool preparation logs identify the file and destination.
+
+For a restarted container, add `--previous`. If the container never started, inspect `kubectl -n <application-namespace> describe pod <live-pod>` for image, scheduling and volume-mount errors. An administrator can collect these logs when your account has no pod access.

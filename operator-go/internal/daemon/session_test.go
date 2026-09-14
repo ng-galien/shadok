@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -44,5 +45,16 @@ func TestSessionOutputsNeedNoLocalConfiguration(t *testing.T) {
 	}
 	if err := ValidateSessionRoots(project, g.Roots); err == nil {
 		t.Fatal("symlink escape accepted")
+	}
+}
+
+func TestSessionLookupPreservesGatewayError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "session is not live", http.StatusConflict)
+	}))
+	defer server.Close()
+	_, err := LoadSession(context.Background(), Destination{URL: server.URL, Namespace: "team", Session: "orders"}, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "team/orders: HTTP 409: session is not live") {
+		t.Fatalf("lost gateway error: %v", err)
 	}
 }

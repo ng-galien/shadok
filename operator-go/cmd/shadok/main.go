@@ -386,12 +386,17 @@ func run(args []string) error {
 		return err
 	}
 	deadline := time.Now().Add(*timeout)
+	lastError := ""
 	for time.Now().Before(deadline) {
 		var jobs []*daemon.Job
 		if err = ipc(ctx, "GET", "/jobs", nil, &jobs); err != nil {
 			return err
 		}
 		for _, j := range jobs {
+			if j.ID == job.ID && j.Error != "" && j.Error != lastError {
+				lastError = j.Error
+				fmt.Fprintf(os.Stderr, "sync failed (retrying): %s\n", lastError)
+			}
 			if j.ID == job.ID && j.Ack.Applied && j.Ack.Revision == job.Snapshot.Manifest.Revision {
 				fmt.Printf("applied revision=%s receiverEpoch=%s podUID=%s (application reload not verified)\n", j.Ack.Revision, j.Ack.Epoch, j.Ack.PodUID)
 				return nil
@@ -403,7 +408,10 @@ func run(args []string) error {
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
-	return fmt.Errorf("confirmation timed out; snapshot retained and retries continue; inspect shadok status or unwatch")
+	if lastError != "" {
+		return fmt.Errorf("confirmation timed out: %s; snapshot retained and retries continue; inspect shadok status; daemon log: %s", lastError, filepath.Join(daemon.StateDir(), "daemon.log"))
+	}
+	return fmt.Errorf("confirmation timed out: no acknowledgement received; snapshot retained and retries continue; inspect shadok status; daemon log: %s", filepath.Join(daemon.StateDir(), "daemon.log"))
 }
 func client() *http.Client {
 	return &http.Client{Timeout: 55 * time.Second, Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {

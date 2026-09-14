@@ -27,15 +27,16 @@ func LoadSession(ctx context.Context, d Destination, directory string) (Group, e
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return Group{}, err
+		return Group{}, fmt.Errorf("read session %s/%s: %w", d.Namespace, d.Session, err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		return Group{}, fmt.Errorf("read session %s/%s: HTTP %d", d.Namespace, d.Session, res.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+		return Group{}, fmt.Errorf("read session %s/%s: HTTP %d: %s", d.Namespace, d.Session, res.StatusCode, strings.TrimSpace(string(body)))
 	}
 	g := Group{Mode: "build"}
 	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&g); err != nil {
-		return Group{}, err
+		return Group{}, fmt.Errorf("read session %s/%s: invalid gateway JSON response: %w", d.Namespace, d.Session, err)
 	}
 	if len(g.Roots) == 0 {
 		return Group{}, fmt.Errorf("session %s has no directories with localPath", d.Session)

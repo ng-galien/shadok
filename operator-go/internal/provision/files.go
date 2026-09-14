@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -41,9 +42,12 @@ func Prepare(ctx context.Context, files []File) error {
 		return nil
 	}}
 	for _, f := range files {
+		slog.Info("tool preparation started", "file", f.Path, "directory", f.Directory)
 		if err := download(ctx, c, f); err != nil {
+			slog.Error("tool preparation failed", "file", f.Path, "directory", f.Directory, "error", err)
 			return fmt.Errorf("prepare %s: %w", f.Path, err)
 		}
+		slog.Info("tool preparation completed", "file", f.Path, "directory", f.Directory)
 	}
 	return nil
 }

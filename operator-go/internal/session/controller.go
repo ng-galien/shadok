@@ -60,13 +60,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		cond.Reason = "ConflictOrUnavailable"
 		cond.Message = err.Error()
 	}
+	if old := meta.FindStatusCondition(before.Status.Conditions, "Ready"); err == nil && (old == nil || old.Status != cond.Status || old.ObservedGeneration != cond.ObservedGeneration || old.Reason != cond.Reason) {
+		ctrl.LoggerFrom(ctx).Info("session transition completed", "deployment", s.Spec.Deployment, "enabled", s.Spec.Enabled, "generation", s.Generation, "reason", cond.Reason)
+	}
 	meta.SetStatusCondition(&s.Status.Conditions, cond)
 	s.Status.ObservedGeneration = s.Generation
 	if e := r.Status().Patch(ctx, s, client.MergeFrom(before)); e != nil {
 		return ctrl.Result{}, e
 	}
 	if err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "session transition failed")
+		ctrl.LoggerFrom(ctx).Error(err, "session transition failed", "deployment", s.Spec.Deployment, "enabled", s.Spec.Enabled, "generation", s.Generation)
 	}
 	return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 }
