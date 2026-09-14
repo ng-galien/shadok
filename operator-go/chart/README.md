@@ -42,6 +42,7 @@ helm test shadok -n shadok-system --logs
 | `tests.*` | Helm connection test pod; configurable test image. Tests TCP reachability, not full synchronization. |
 | `uninstallGuard.*` | Pre-delete Job rejects uninstall while sessions are enabled or still restoring; reads through the operator account. |
 | `session.directories[].localPath`, `exclude` | Local project output and optional exclusions returned to `shadok publish/build/watch --session namespace/name`; no local sync file required. |
+| `session.podTemplatePatch` | Kubernetes Strategic Merge Patch of the baseline pod template, before Shadok adds its live settings. Omitted fields inherit; null removes; container lists merge by name. |
 | `session.*` | Optional DevelopmentSession with namespace, labels/annotations, target, directories, command, UID/GID and live image override. |
 
 Example settings for HA and a private registry:

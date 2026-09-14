@@ -89,6 +89,30 @@ The original sources seed the writable directory. The virtualenv and site-packag
 
 For Django or Flask, replace `start` with the corresponding command from chapter 3, split into executable and argument list, and use its actual project working directory. Keep the image's port/probes aligned with that command. `spec.image` is omitted to retain the production image.
 
+
+### Optional live probes and resources
+
+Add this under `spec` in the same session, replacing `APPLICATION_CONTAINER` with the existing container name. The values are examples to size for your application:
+
+```yaml
+  podTemplatePatch: |
+    spec:
+      containers:
+        - name: APPLICATION_CONTAINER
+          livenessProbe: null
+          resources:
+            requests:
+              cpu: "500m"
+            limits:
+              cpu: "2"
+```
+
+This example disables liveness during live mode and changes CPU only. Readiness and memory remain inherited. Use the same Kubernetes fields to adjust probes instead of removing them. A startup probe protects initial startup, not subsequent reloads.
+
+Keep the `|`: the patch is YAML text, so `null` deletions survive Helm and `kubectl apply`. The patch uses Kubernetes Strategic Merge Patch rules on the pod template: containers and environment variables merge by name, omitted fields are retained, and `null` removes a field. Lists without a merge strategy are replaced. The operator applies it to the saved production template before adding Shadok's command, mounts and synchronization containers; those session-managed settings take precedence. Deployment selectors and replicas are outside this patch.
+
+Apply changes to the session to trigger a new rollout. Removing a patch field restores that production value; disabling the session restores the production template. No manual Deployment patch is required.
+
 ## 5. Create the source mapping
 
 Set `localPath` on the session directory to the source directory relative to the CLI working directory. The gateway supplies that mapping and its exclusions to the client. No local YAML is needed. Keep virtual environments and credentials outside the mirrored tree.

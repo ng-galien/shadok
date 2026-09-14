@@ -132,6 +132,11 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-list-type: atomic
+              podTemplatePatch:
+                description: |-
+                  Kubernetes strategic merge patch of the baseline PodTemplateSpec, before Shadok initialization.
+                  YAML/JSON text preserves null deletions through kubectl apply and Helm.
+                type: string
               runAsGroup:
                 format: int64
                 minimum: 1

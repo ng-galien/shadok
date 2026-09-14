@@ -163,3 +163,14 @@ func TestUnsupportedKubernetes(t *testing.T) {
 func TestKubernetesAPIFloor(t *testing.T) {
 	render(t, `{}`, "", "--kube-version", "1.25.0")
 }
+
+func TestPodTemplatePatchPreservesNullAsText(t *testing.T) {
+	patch := "spec:\n  containers:\n    - name: app\n      livenessProbe: null\n"
+	values, _ := json.Marshal(map[string]any{"session": map[string]any{"create": true, "name": "live", "deployment": "app", "directories": []any{map[string]any{"name": "app", "imagePath": "/app", "mountPath": "/app"}}, "start": map[string]any{"command": []string{"run"}}, "podTemplatePatch": patch}})
+	objects := render(t, string(values), "")
+	session := find(t, objects, "DevelopmentSession", "live")
+	actual, found, err := unstructured.NestedString(session.Object, "spec", "podTemplatePatch")
+	if err != nil || !found || actual != patch {
+		t.Fatalf("patch changed during Helm rendering: %q %v", actual, err)
+	}
+}

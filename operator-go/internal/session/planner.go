@@ -20,6 +20,12 @@ func overlaps(a, b string) bool {
 }
 func validPath(p string) bool { return strings.HasPrefix(p, "/") && path.Clean(p) == p && p != "/" }
 func Plan(s *api.DevelopmentSession, d *appsv1.Deployment, image string) (*corev1.Pod, error) {
+	var err error
+	d, err = patchTemplate(s, d)
+	if err != nil {
+		return nil, err
+	}
+
 	if len(s.Spec.Directories) == 0 || len(s.Spec.Start.Command) == 0 {
 		return nil, fmt.Errorf("directories and live command are required")
 	}

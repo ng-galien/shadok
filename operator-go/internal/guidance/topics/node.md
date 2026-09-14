@@ -81,6 +81,30 @@ Shadok initializes the writable directory with the image's existing files. `node
 
 For source JS, replace both directory paths with the actual source path, and the entry argument with its real relative path, such as `src/server.js`. For a static web server, retain its actual production command/arguments and mirror only its served assets directory.
 
+
+### Optional live probes and resources
+
+Add this under `spec` in the same session, replacing `APPLICATION_CONTAINER` with the existing container name. The values are examples to size for your application:
+
+```yaml
+  podTemplatePatch: |
+    spec:
+      containers:
+        - name: APPLICATION_CONTAINER
+          livenessProbe: null
+          resources:
+            requests:
+              cpu: "500m"
+            limits:
+              cpu: "2"
+```
+
+This example disables liveness during live mode and changes CPU only. Readiness and memory remain inherited. Use the same Kubernetes fields to adjust probes instead of removing them. A startup probe protects initial startup, not subsequent reloads.
+
+Keep the `|`: the patch is YAML text, so `null` deletions survive Helm and `kubectl apply`. The patch uses Kubernetes Strategic Merge Patch rules on the pod template: containers and environment variables merge by name, omitted fields are retained, and `null` removes a field. Lists without a merge strategy are replaced. The operator applies it to the saved production template before adding Shadok's command, mounts and synchronization containers; those session-managed settings take precedence. Deployment selectors and replicas are outside this patch.
+
+Apply changes to the session to trigger a new rollout. Removing a patch field restores that production value; disabling the session restores the production template. No manual Deployment patch is required.
+
 ## 4. Write the local mapping and build command
 
 Set `localPath: dist` on the session's application directory for compiled output, or `localPath: src` for executable source. Use the project's actual output directory relative to the CLI working directory. Shadok reads it from the session. Ensure the build removes obsolete output files after source deletion.

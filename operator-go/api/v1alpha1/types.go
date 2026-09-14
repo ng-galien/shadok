@@ -75,6 +75,10 @@ type InitStep struct {
 }
 
 type SessionSpec struct {
+	// Kubernetes strategic merge patch of the baseline PodTemplateSpec, before Shadok initialization.
+	// YAML/JSON text preserves null deletions through kubectl apply and Helm.
+	PodTemplatePatch string `json:"podTemplatePatch,omitempty"`
+
 	// Enable live transformation of the existing Deployment; false restores its baseline.
 	Enabled bool `json:"enabled"`
 

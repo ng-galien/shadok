@@ -191,6 +191,30 @@ The mirror contains `dev/app/...` only. **Keep these exclusions**: they prevent 
 
 For multi-module applications, Quarkus also prepares reloadable module directories under `dev/<groupId>/<artifactId>`. Identify them in that version's mutable application and stage each module's outputs at the corresponding path. The single-module mapping above does not automatically cover other modules.
 
+
+### Optional live probes and resources
+
+Add this under `spec` in the same session, replacing `APPLICATION_CONTAINER` with the existing container name. The values are examples to size for your application:
+
+```yaml
+  podTemplatePatch: |
+    spec:
+      containers:
+        - name: APPLICATION_CONTAINER
+          livenessProbe: null
+          resources:
+            requests:
+              cpu: "500m"
+            limits:
+              cpu: "2"
+```
+
+This example disables liveness during live mode and changes CPU only. Readiness and memory remain inherited. Use the same Kubernetes fields to adjust probes instead of removing them. A startup probe protects initial startup, not subsequent reloads.
+
+Keep the `|`: the patch is YAML text, so `null` deletions survive Helm and `kubectl apply`. The patch uses Kubernetes Strategic Merge Patch rules on the pod template: containers and environment variables merge by name, omitted fields are retained, and `null` removes a field. Lists without a merge strategy are replaced. The operator applies it to the saved production template before adding Shadok's command, mounts and synchronization containers; those session-managed settings take precedence. Deployment selectors and replicas are outside this patch.
+
+Apply changes to the session to trigger a new rollout. Removing a patch field restores that production value; disabling the session restores the production template. No manual Deployment patch is required.
+
 ## 6. Compile and publish — choose your build tool
 
 ### Gradle

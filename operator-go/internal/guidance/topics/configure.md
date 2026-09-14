@@ -87,3 +87,26 @@ Declare tools and extra mounts in `spec.volumes` of the DevelopmentSession. The 
 Each entry has `name`, `mountPath`, optional `readOnly`, and exactly one source: `persistentVolumeClaim`, `configMap`, `secret`, or `files`. Existing Kubernetes resources must be in the session namespace. `files` provisions an emptyDir and downloads the declared HTTPS URLs with SHA256 verification before application startup. Each file requires `path` (a filename), `url`, and `sha256`. See `shadok learn spring` for a complete configuration.
 
 Omit a directory's `imagePath` to create an empty working directory for initialization or synchronization. Set it when files must be copied from the application image.
+
+### Optional live probes and resources
+
+Add this under `spec` in the same session, replacing `APPLICATION_CONTAINER` with the existing container name. The values are examples to size for your application:
+
+```yaml
+  podTemplatePatch: |
+    spec:
+      containers:
+        - name: APPLICATION_CONTAINER
+          livenessProbe: null
+          resources:
+            requests:
+              cpu: "500m"
+            limits:
+              cpu: "2"
+```
+
+This example disables liveness during live mode and changes CPU only. Readiness and memory remain inherited. Use the same Kubernetes fields to adjust probes instead of removing them. A startup probe protects initial startup, not subsequent reloads.
+
+Keep the `|`: the patch is YAML text, so `null` deletions survive Helm and `kubectl apply`. The patch uses Kubernetes Strategic Merge Patch rules on the pod template: containers and environment variables merge by name, omitted fields are retained, and `null` removes a field. Lists without a merge strategy are replaced. The operator applies it to the saved production template before adding Shadok's command, mounts and synchronization containers; those session-managed settings take precedence. Deployment selectors and replicas are outside this patch.
+
+Apply changes to the session to trigger a new rollout. Removing a patch field restores that production value; disabling the session restores the production template. No manual Deployment patch is required.

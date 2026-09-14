@@ -137,6 +137,8 @@ tests:
   enabled: true
   image: {repository: busybox, tag: "1.37.0", digest: ""}
 session:
+  # Strategic merge patch of the baseline PodTemplateSpec, before live transformation.
+  podTemplatePatch: ""
   create: false
   name: live
   namespace: ""

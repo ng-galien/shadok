@@ -94,6 +94,7 @@ jobs:
           docker build -t shadok-baseline:local -f operator-go/test/e2e/Dockerfile.baseline operator-go/test/e2e
           kind load docker-image --name shadok-go-e2e shadok-baseline:local
           python3 operator-go/test/e2e/kind_e2e.py --stack baseline
+          python3 operator-go/test/e2e/template_patch.py
       - name: Capture Kubernetes diagnostics
         if: failure()
         run: |

@@ -961,6 +961,9 @@
               }
             ]
           }
+        },
+        "podTemplatePatch": {
+          "type": "string"
         }
       }
     },

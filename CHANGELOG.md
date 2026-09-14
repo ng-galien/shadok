@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0
+
+- Apply Kubernetes Strategic Merge Patch from `DevelopmentSession.spec.podTemplatePatch` to customize live pod probes, resources and other template fields, with baseline restoration.
+
 ## 1.3.0
 
 - Replace incompatible local daemons automatically while retaining persisted synchronization jobs.
