@@ -35,7 +35,7 @@ make generic-images # local images; ARCH=amd64 or ARCH=arm64
 
 The operator owns the live transformation and restoration. It preserves routing labels, annotations, sidecars, environment, probes and resources, and records the baseline Pod template and Deployment UID. External template changes cause a conflict instead of being overwritten. The session target is immutable. `Ready=True` reports a successful template transition, not completion of the rollout or application reload.
 
-The gateway reads live sessions and ready receiver Pods through its own restricted Kubernetes identity. The developer controls the session CR; the CLI and daemon use only HTTP(S). Source groups are watched periodically. Build groups keep an immutable snapshot until replaced by a later successful build. New receiver cohorts are reconciled even without a local file change.
+The gateway reads live sessions and ready receiver Pods through its own restricted Kubernetes identity. The platform controls session configuration; a developer can be granted activation rights on an existing session through RBAC plus admission. The CLI and daemon use only HTTP(S), whose gateway access must be protected separately. Source groups are watched periodically. Build groups keep an immutable snapshot until replaced by a later successful build. New receiver cohorts are reconciled even without a local file change. See [the RBAC operating guide](internal/guidance/topics/rbac.md).
 
 The optional live application image is used by both the application and seed container; disabling the session restores the original image and pull policy. Shadok's compiler and runtime base images are build-time settings. Private image pull credentials must exist in each namespace where the images are pulled.
 

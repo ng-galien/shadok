@@ -20,7 +20,7 @@ If `upgrade` is unavailable, install the CLI from the release archive.
 
 ## Operator and gateway — platform administrator
 
-Requirements: a CLI from the target release, Helm, kubectl and cluster permissions. Replace the context, namespace and release name below.
+Requirements: a CLI from the target release, Helm, kubectl and cluster permissions. Replace the context, namespace and release name below. Review the admission policy and effective RBAC with `shadok learn rbac` before delegating session access, especially after a chart upgrade.
 
 ```sh
 shadok upgrade cluster --context company-dev \
@@ -49,5 +49,6 @@ kubectl --context company-dev -n shadok-system get deployments,pods
 ```
 
 Run a build/sync and check an application endpoint.
+Also verify the `ValidatingAdmissionPolicy` and its binding are still installed, have no type-check warnings, and that the developer identity can only toggle an existing session. Use the dry-run commands in `shadok learn rbac`.
 
 If the upgrade fails, inspect the reported error and the saved values/manifests. The backup is retained. A Helm rollback does not roll back an applied CRD.

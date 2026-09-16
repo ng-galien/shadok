@@ -18,7 +18,7 @@ import (
 //go:embed topics/*.md
 var topics embed.FS
 
-var topicNames = []string{"learn", "spring", "quarkus", "node", "python", "install", "network", "upgrade", "lifecycle", "inspect", "configure", "builds", "verify", "chart"}
+var topicNames = []string{"learn", "spring", "quarkus", "node", "python", "install", "rbac", "network", "upgrade", "lifecycle", "inspect", "configure", "builds", "verify", "chart"}
 
 const Help = `Shadok: live development for existing Kubernetes Deployments
 
@@ -27,7 +27,7 @@ Usage: shadok COMMAND [OPTIONS]
 Offline guidance (no daemon, network or cluster access):
   help, --help, -h            Show this command reference
   learn [TOPIC]              Agent onboarding, or a specific operational topic
-  docs [TOPIC]               spring, quarkus, node, python, install, network, upgrade, lifecycle,
+  docs [TOPIC]               spring, quarkus, node, python, install, rbac, network, upgrade, lifecycle,
                             inspect, configure, builds, verify, chart,
                             values, schema, crd, all (default: topic index)
   chart export DIRECTORY    Export the complete embedded Helm chart to a new directory
@@ -128,7 +128,7 @@ func Document(topic string) ([]byte, error) {
 			return topics.ReadFile("topics/" + topic + ".md")
 		}
 	}
-	return nil, fmt.Errorf("unknown documentation topic %q; available: learn, spring, quarkus, node, python, install, network, upgrade, lifecycle, inspect, configure, builds, verify, chart, values, schema, crd, all", topic)
+	return nil, fmt.Errorf("unknown documentation topic %q; available: learn, spring, quarkus, node, python, install, rbac, network, upgrade, lifecycle, inspect, configure, builds, verify, chart, values, schema, crd, all", topic)
 }
 
 func Print(w io.Writer, topic string) error {

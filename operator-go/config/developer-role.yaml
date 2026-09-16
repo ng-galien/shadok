@@ -1,5 +1,7 @@
 # Apply this Role in the application's namespace, then bind it to the developer identity.
 # The platform creates the configured DevelopmentSession through Helm.
+# Example namespace-wide testing Role, not the recommended single-session grant.
+# For production, use the resourceNames-scoped Role and RoleBinding in `shadok learn rbac`.
 # Requires the chart session admission policy: this Role alone cannot restrict fields.
 # Admission permits enabled changes only unless the caller can patch the target Deployment.
 apiVersion: rbac.authorization.k8s.io/v1

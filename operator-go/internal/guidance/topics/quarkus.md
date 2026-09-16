@@ -14,7 +14,7 @@ Create these files in your application repository:
 | `live/session.yaml` | Target, live directory and startup command |
 | Gradle `stageShadok` task **or** Maven staging commands below | Place compiled application files at `dev/app/` in the local mirror |
 
-An agent restricted to DevelopmentSessions obtains image/layout information and matching framework resources from the platform. It supplies the volume/mount files to the platform; it does not need broader permissions to publish builds.
+An agent restricted to an existing DevelopmentSession obtains image/layout information and matching framework resources from the platform. The platform identity applies its session and any tool-volume resources; the developer may toggle `spec.enabled` and publish builds. See `shadok learn rbac`.
 
 ## 2. Inspect the production image
 
@@ -132,7 +132,7 @@ spec:
 Adjust storage capacity to the bundle size and choose an access mode compatible with replica placement. Concurrent ReadWriteOnce mounts require the same node. Populate a fresh volume:
 
 ```sh
-kubectl --context "$CONTEXT" apply -f live/tools-volume.yaml
+kubectl --context "$CONTEXT" apply -f live/tools-volume.yaml # Platform identity
 kubectl --context "$CONTEXT" -n "$NAMESPACE" wait \
   --for=condition=Ready pod/quarkus-reload-tools-loader --timeout=120s
 kubectl --context "$CONTEXT" -n "$NAMESPACE" cp \
@@ -259,7 +259,7 @@ This route uses Shadok for transport. Do not simultaneously start Quarkus's sepa
 ## 7. Activate and prove reload
 
 ```sh
-kubectl --context "$CONTEXT" apply -f live/session.yaml
+kubectl --context "$CONTEXT" apply -f live/session.yaml # Platform identity
 kubectl --context "$CONTEXT" -n "$NAMESPACE" patch developmentsession quarkus-live \
   --type merge -p '{"spec":{"enabled":true}}'
 kubectl --context "$CONTEXT" -n "$NAMESPACE" get developmentsession quarkus-live -o yaml

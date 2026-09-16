@@ -17,13 +17,13 @@ Select the intended context. Create `deployment-values.yaml` with your registry,
 ```yaml
 operator:
   watchNamespaces: [team-a]
-  image: {repository: registry.example.com/shadok/operator, tag: "1.2.0"}
-  toolImage: {repository: registry.example.com/shadok/tools, tag: "1.2.0"}
+  image: {repository: registry.example.com/shadok/operator, tag: ""}
+  toolImage: {repository: registry.example.com/shadok/tools, tag: ""}
 gateway:
-  image: {repository: registry.example.com/shadok/gateway, tag: "1.2.0"}
+  image: {repository: registry.example.com/shadok/gateway, tag: ""}
 ```
 
-Use `shadok docs values` for all options. Configure gateway exposure with `shadok learn network`. For private registries, provide image-pull credentials in both the installation and application namespaces.
+An empty tag selects the exported chart's `appVersion`; verify your mirror contains that version. Use `shadok docs values` for all options. Configure gateway exposure with `shadok learn network`. For private registries, provide image-pull credentials in both the installation and application namespaces.
 
 ## Install and verify
 
@@ -42,11 +42,4 @@ Next: choose your complete application guide with `shadok learn`. For updates, u
 
 ## Session permissions
 
-The operator chart installs a fail-closed Kubernetes ValidatingAdmissionPolicy by default (`sessionAdmission.enabled: true`). This built-in protection requires Kubernetes 1.30 or newer. The chart requires Kubernetes 1.30 or newer. Disable this policy only when the platform already enforces equivalent admission rules. The application-only chart does not install the policy; install the operator infrastructure first.
-
-Use two existing Kubernetes permission levels:
-
-- **Platform / deployment CI:** permission to patch the target Deployment, plus permission to manage DevelopmentSessions. This identity configures sessions, including commands, tools, mounts and template patches.
-- **Developer:** the session Role in `operator-go/config/developer-role.yaml`, limited to the intended namespace/sessions. Without patch permission on the target Deployment, admission permits only changing `spec.enabled`; configuration changes, creation and deletion are denied. Do not grant developers permission to alter admission policies, RBAC or impersonate the platform identity.
-
-The policy checks the caller's Deployment patch permission through Kubernetes authorization. No separate identity list is required. The RBAC Role alone does not restrict fields. Existing sessions are not retroactively validated: the platform must review their configuration before delegating access. Live code retains the application's existing credentials and permissions; use an appropriate development workload and data environment.
+The operator chart enables a fail-closed admission policy. The platform configures sessions with an identity that can patch their target Deployments; developers can be granted only activation of an existing session. Before delegating access, follow `shadok learn rbac` to install and inspect the policy, review existing sessions, bind named identities, verify permitted and denied operations, and protect the HTTP gateway separately. An application-only chart does not install this policy.

@@ -2,7 +2,7 @@
 
 ## 1. Prerequisites and target values
 
-Work in the application's repository. The platform supplies an installed Shadok gateway, the existing Deployment/container details and access to DevelopmentSessions. Keep the application's chart, routing and production image.
+Work in the application's repository. The platform supplies an installed Shadok gateway and the existing Deployment/container details. Its identity creates and configures the session. A developer with session-only rights can toggle `spec.enabled` and publish builds; see `shadok learn rbac`. Keep the application's chart, routing and production image.
 
 ```sh
 export CONTEXT=YOUR_CONTEXT
@@ -133,7 +133,7 @@ Dependency/lockfile changes require corresponding runtime dependencies before ac
 ## 5. Activate and verify actual reload
 
 ```sh
-kubectl --context "$CONTEXT" apply -f live/session.yaml
+kubectl --context "$CONTEXT" apply -f live/session.yaml # Platform identity
 kubectl --context "$CONTEXT" -n "$NAMESPACE" patch developmentsession node-live \
   --type merge -p '{"spec":{"enabled":true}}'
 kubectl --context "$CONTEXT" -n "$NAMESPACE" get developmentsession node-live -o yaml

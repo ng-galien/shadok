@@ -2,7 +2,7 @@
 
 ## 1. Prerequisites and target values
 
-Work in the application's repository. Keep its existing image, Deployment/chart, configuration and routing. The platform supplies Shadok, its gateway address and permissions to manage DevelopmentSessions.
+Work in the application's repository. Keep its existing image, Deployment/chart, configuration and routing. The platform supplies Shadok and its gateway address. Its identity creates and configures the session; a developer with session-only rights can toggle `spec.enabled` and publish builds. See `shadok learn rbac`.
 
 ```sh
 export CONTEXT=YOUR_CONTEXT
@@ -122,7 +122,7 @@ For generated source, use `shadok build ... -- YOUR_GENERATION_COMMAND` after ac
 ## 6. Activate and start synchronization
 
 ```sh
-kubectl --context "$CONTEXT" apply -f live/session.yaml
+kubectl --context "$CONTEXT" apply -f live/session.yaml # Platform identity
 kubectl --context "$CONTEXT" -n "$NAMESPACE" patch developmentsession python-live \
   --type merge -p '{"spec":{"enabled":true}}'
 kubectl --context "$CONTEXT" -n "$NAMESPACE" get developmentsession python-live -o yaml

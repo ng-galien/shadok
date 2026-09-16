@@ -18,11 +18,12 @@ Start with the production image and Deployment actually used by your project. Ke
 | Task | Guide |
 | --- | --- |
 | Install the operator, gateway and permissions | `shadok learn install` |
+| Assign and verify developer and platform rights | `shadok learn rbac` |
 | Expose the sync gateway through DNS, TLS and Ingress | `shadok learn network` |
 | Update the CLI or cluster installation | `shadok learn upgrade` |
 | Disable/delete sessions and restore applications | `shadok learn lifecycle` |
 
-Developers can have permissions only on DevelopmentSessions. They declare tool files and mounts in the session; the platform provides any referenced PVCs, Secrets or ConfigMaps. They do not reproduce or replace the platform's deployments. Synchronization clients need gateway access, not Kubernetes credentials.
+The platform configures DevelopmentSessions, including tool files and mounts, and provides any referenced PVCs, Secrets or ConfigMaps. Developers with session-only rights can toggle live mode after that configuration is approved. They do not reproduce or replace the platform's Deployments. Synchronization clients need gateway access, not Kubernetes credentials; protect that HTTP access separately.
 
 ## 3. Reference — optional
 

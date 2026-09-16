@@ -29,6 +29,7 @@ helm test shadok -n shadok-system --logs
 | `operator.enabled` | Disable infrastructure to install only an application session. |
 | `operator.watchNamespaces` | Empty means all namespaces with ClusterRoles; otherwise cache and gateway are scoped and Roles/Bindings are created in the listed existing namespaces. |
 | `rbac.create`, `serviceAccounts.*` | Use generated or pre-existing permissions/accounts. Existing accounts must have the documented equivalent permissions. |
+| `sessionAdmission.enabled` | Install the fail-closed session admission policy and binding with the operator (default `true`). Disable only when an equivalent policy already protects sessions. |
 | `operator.leaderElection`, `operator.replicas` | Lease-based controller leadership. More than one replica requires election. Do not run independent overlapping installations with different leases. |
 | `operator.*`, `gateway.*` | Per-component resources, pod labels/annotations, Deployment annotations, probes, security contexts, nodeSelector, tolerations, affinity, topology spread, priority, termination grace, strategy, environment and volumes. |
 | `*.tmpSizeLimit` | Writable `/tmp` emptyDir while the root filesystem remains read-only. |
@@ -52,12 +53,12 @@ imagePullSecrets: [{name: registry-pull}]
 operator:
   replicas: 2
   watchNamespaces: [team-a, team-b]
-  image: {repository: registry.example.com/shadok/operator, tag: "1.0.0"}
-  toolImage: {repository: registry.example.com/shadok/tools, tag: "1.0.0"}
+  image: {repository: registry.example.com/shadok/operator, tag: ""}
+  toolImage: {repository: registry.example.com/shadok/tools, tag: ""}
   podAnnotations: {example.com/owner: platform}
   pdb: {enabled: true, minAvailable: 1}
 gateway:
-  image: {repository: registry.example.com/shadok/gateway, tag: "1.0.0"}
+  image: {repository: registry.example.com/shadok/gateway, tag: ""}
   autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 5}
   pdb: {enabled: true, minAvailable: 1}
 ingress:
@@ -67,7 +68,7 @@ ingress:
   tlsSecretName: sync-tls
 ```
 
-The source images have no implicit public publication. Replace all example registry names and use versions/digests you have built and pushed.
+The source images have no implicit public publication. Replace all example registry names with repositories you have built and pushed; empty tags use the chart's `appVersion`. Verify the referenced images exist in your registry.
 
 ## Custom images and bases
 
@@ -91,7 +92,7 @@ Before uninstall, set every managed session to `enabled: false` and wait for `Re
 
 References: [Helm CRD lifecycle](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/), [chart schema](https://helm.sh/docs/topics/charts/), [OCI registries](https://helm.sh/docs/topics/registries/).
 
-The Kubernetes 1.30 minimum provides stable ValidatingAdmissionPolicy support. Session admission is enabled by default: configuration requires patch permission on the target Deployment; other session editors can only toggle enabled. Runtime validation covers Kubernetes 1.36; Helm rendering checks the 1.30 minimum.
+The Kubernetes 1.30 minimum provides stable ValidatingAdmissionPolicy support. Session admission is enabled by default: configuration requires patch permission on the target Deployment; other session editors can only toggle enabled. The application-only chart does not install the policy. Review effective RBAC and the binding before delegating write access: [RBAC operating guide](../internal/guidance/topics/rbac.md). Kubernetes RBAC does not authenticate gateway HTTP uploads. Runtime validation covers Kubernetes 1.36; Helm rendering checks the 1.30 minimum.
 
 New sessions have no Shadok deletion finalizer. Independent recovery ConfigMaps survive session/CRD deletion and enable asynchronous cleanup after operator restart. Existing legacy finalizers are removed automatically after preserving their recovery data. See `shadok learn lifecycle`.
 

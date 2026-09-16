@@ -8,7 +8,7 @@
 
 Keep the Deployment your platform already delivers through Helm or Helmfile: its configuration, resources and Service routing. Activate a development session, build on your workstation or a CI runner, and send changed files into the running application. End the session to restore the saved Pod template. No duplicate deployment configuration on the developer's machine; no Kubernetes credentials in the synchronization client.
 
-The platform installs Shadok once. Developers can be granted access only to `DevelopmentSession` resources; the operator handles workload changes with its own permissions. Each application declares the directories and live command it needs.
+The platform installs Shadok and configures each `DevelopmentSession`, including its live directories and command. Developers can be granted access to toggle an existing session; the operator handles workload changes with its own permissions. Protect the synchronization gateway separately because it does not authenticate writers itself.
 
 ## How it works
 
@@ -55,6 +55,7 @@ Choose one complete guide and work in your application's repository. Each includ
 ## Platform administration
 
 - [Install Shadok](operator-go/internal/guidance/topics/install.md): operator, gateway and chart.
+- [Operate RBAC and admission](operator-go/internal/guidance/topics/rbac.md): platform/developer permissions and verification.
 - [Expose the gateway](operator-go/internal/guidance/topics/network.md): DNS, TLS, Ingress and destination.
 - [Upgrade](operator-go/internal/guidance/topics/upgrade.md): CLI and cluster installation.
 - [Restore and delete sessions](operator-go/internal/guidance/topics/lifecycle.md).

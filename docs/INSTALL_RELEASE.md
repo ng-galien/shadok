@@ -16,11 +16,11 @@ shadok learn spring
 shadok learn network
 ```
 
-These guides are embedded and work offline. `shadok chart export ./shadok-chart` exports the same release chart with its versioned image references.
+These guides are embedded and work offline. The [RBAC operating guide](../operator-go/internal/guidance/topics/rbac.md) was added after the 1.4.1 release and is available in this repository; the published 1.4.1 CLI does not yet have a `rbac` topic. `shadok chart export ./shadok-chart` exports the release chart with its versioned image references.
 
 ## Install the operator from GHCR
 
-Use Helm 3/4. The 1.4.1 chart requires Kubernetes 1.30+ for its default session admission policy. Runtime validation covers 1.36.1, not every version above the floor. The platform administrator installs the CRD and operator; developers only need permissions on DevelopmentSession resources and access to the sync endpoint. On a workstation, Docker and Kind supply an isolated Kubernetes environment:
+Use Helm 3/4. The 1.4.1 chart requires Kubernetes 1.30+ for its default session admission policy. Runtime validation covers 1.36.1, not every version above the floor. The platform administrator installs the CRD, operator and admission policy, and configures sessions. Developers can be granted patch permission on named existing DevelopmentSessions for activation, plus access to the protected sync endpoint. Follow [the RBAC operating guide](../operator-go/internal/guidance/topics/rbac.md) before granting access. On a workstation, Docker and Kind supply an isolated Kubernetes environment:
 
 ```sh
 kind create cluster --name shadok-professional --kubeconfig ./shadok-kind.kubeconfig
@@ -39,9 +39,9 @@ Public GHCR packages allow anonymous pulls. For a corporate registry mirror, ove
 
 ## Connect your application
 
-Keep your existing Helm/Helmfile Deployment. Configure one DevelopmentSession with its container name, image paths, live mounts and live command. The chart's `session.*` values can create it; use `operator.enabled: false` for additional application-only releases. Existing application images must contain the runtime, dependencies and initial directories.
+Keep your existing Helm/Helmfile Deployment. The platform configures one DevelopmentSession with its container name, image paths, live mounts and live command. The chart's `session.*` values can create it; use `operator.enabled: false` for additional application-only releases only after installing the shared operator and admission policy. Existing application images must contain the runtime, dependencies and initial directories.
 
-Expose the gateway through your platform's trusted ingress/TLS or private network. Preserve `/<namespace>/<deployment>/plan` and `/apply`. Kind needs host port mappings when using NodePort/Ingress. [The local ingress guide](LOCAL_INGRESS.md) documents the Traefik setup; the release smoke test below uses direct TLS NodePort on loopback. Neither TLS nor nip.io authenticates writers; built-in authentication is not implemented.
+Expose the gateway through your platform's trusted ingress/TLS or private network. Preserve `/sessions/<namespace>/<session>/plan` and `/apply`; legacy clients use `/<namespace>/<deployment>/plan` and `/apply`. Kind needs host port mappings when using NodePort/Ingress. [The local ingress guide](LOCAL_INGRESS.md) documents the Traefik setup; the release smoke test below uses direct TLS NodePort on loopback. Kubernetes RBAC/admission do not authenticate HTTP publishers. Neither TLS nor nip.io authenticates writers; built-in authentication is not implemented.
 
 Choose a complete guide for the application's existing production image. Each contains its own YAML files, startup configuration, build/sync commands, verification and restoration:
 

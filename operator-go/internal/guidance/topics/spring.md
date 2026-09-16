@@ -2,6 +2,8 @@
 
 Work in the application's repository. Keep its production image and its existing Helm/Deployment configuration. The session declares DevTools as a verified tool file. The operator downloads it into a per-pod volume and mounts it read-only before Java starts. At each new pod startup, a standard JDK init container extracts the JAR copied from the production image into Shadok working volumes. It requires no Shadok Maven profile.
 
+Have the platform identity review and apply the session and any later changes to its tools, mounts, command or patch. A developer with session-only rights can then toggle `spec.enabled` and publish builds. See `shadok learn rbac` for the exact permission checks.
+
 Create these files in the application repository:
 
 | File | Purpose |
@@ -182,7 +184,7 @@ Use the gateway origin supplied by the platform. The namespace and session name 
 
 ```sh
 export SYNC_URL=https://YOUR_SYNC_HOST
-kubectl --context "$CONTEXT" apply -f live/session.yaml
+kubectl --context "$CONTEXT" apply -f live/session.yaml # Platform identity
 kubectl --context "$CONTEXT" -n "$NAMESPACE" patch developmentsession spring-live \
   --type merge -p '{"spec":{"enabled":true}}'
 kubectl --context "$CONTEXT" -n "$NAMESPACE" get developmentsession spring-live -o yaml

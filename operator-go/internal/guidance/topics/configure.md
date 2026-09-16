@@ -27,7 +27,7 @@ spec:
     workingDir: /VERIFIED/WORKING/DIRECTORY
 ```
 
-Save as `session.yaml` in the target project or add these values through its existing chart. Replace UID/GID as well as paths. Keep `spec.image` absent to retain the production image.
+Save as `session.yaml` in the target project or add these values through its existing chart. The platform identity applies the configuration; a developer with session-only rights asks the platform to approve changes and can then toggle `spec.enabled`. Replace UID/GID as well as paths. Keep `spec.image` absent to retain the production image.
 
 | Field | What the agent must configure |
 | --- | --- |
@@ -113,11 +113,4 @@ Apply changes to the session to trigger a new rollout. Removing a patch field re
 
 ## Session permissions
 
-The operator chart installs a fail-closed Kubernetes ValidatingAdmissionPolicy by default (`sessionAdmission.enabled: true`). This built-in protection requires Kubernetes 1.30 or newer. The chart requires Kubernetes 1.30 or newer. Disable this policy only when the platform already enforces equivalent admission rules. The application-only chart does not install the policy; install the operator infrastructure first.
-
-Use two existing Kubernetes permission levels:
-
-- **Platform / deployment CI:** permission to patch the target Deployment, plus permission to manage DevelopmentSessions. This identity configures sessions, including commands, tools, mounts and template patches.
-- **Developer:** the session Role in `operator-go/config/developer-role.yaml`, limited to the intended namespace/sessions. Without patch permission on the target Deployment, admission permits only changing `spec.enabled`; configuration changes, creation and deletion are denied. Do not grant developers permission to alter admission policies, RBAC or impersonate the platform identity.
-
-The policy checks the caller's Deployment patch permission through Kubernetes authorization. No separate identity list is required. The RBAC Role alone does not restrict fields. Existing sessions are not retroactively validated: the platform must review their configuration before delegating access. Live code retains the application's existing credentials and permissions; use an appropriate development workload and data environment.
+The platform configures and reviews this session, including volumes and template patches. A developer without patch permission on the target Deployment can only toggle `spec.enabled` on an existing session. Run `shadok learn rbac` for the platform binding, admission checks and effective-permission verification. Kubernetes RBAC alone does not restrict session fields.
